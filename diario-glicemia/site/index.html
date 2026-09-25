@@ -1,0 +1,1120 @@
+<title>Diário de Glicemia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@500;700&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
+<style>
+:root{
+  --bg:#F2F6F5; --surface:#FFFFFF; --surface-2:#E7EEEC; --ink:#15262A; --muted:#566B6E; --line:#D3DEDC;
+  --accent:#0E6B74; --accent-ink:#FFFFFF; --accent-soft:#D6ECEC;
+  --after:#B5542A; --after-soft:#F7E2D6;
+  --warn:#8C5800; --warn-soft:#FBEACB; --ok:#2B7A4C; --ok-soft:#DAEEE0; --danger:#A32D2D;
+  --hypo:#B0254A; --hypo-soft:#FBE3E9;
+  --shadow:0 10px 30px rgba(10,40,45,.18);
+  --sans:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"Atkinson Hyperlegible Mono",ui-monospace,"SF Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0D1416; --surface:#152022; --surface-2:#1C2A2D; --ink:#E3ECEA; --muted:#92A5A7; --line:#2A3B3E;
+    --accent:#5ABEC6; --accent-ink:#062327; --accent-soft:#16393C;
+    --after:#EB8E5E; --after-soft:#3A2418;
+    --warn:#F0B54A; --warn-soft:#3A2C10; --ok:#6DCB93; --ok-soft:#15301F; --danger:#F08A8A;
+    --hypo:#F2809C; --hypo-soft:#3B1621;
+    --shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0D1416; --surface:#152022; --surface-2:#1C2A2D; --ink:#E3ECEA; --muted:#92A5A7; --line:#2A3B3E;
+  --accent:#5ABEC6; --accent-ink:#062327; --accent-soft:#16393C;
+  --after:#EB8E5E; --after-soft:#3A2418;
+  --warn:#F0B54A; --warn-soft:#3A2C10; --ok:#6DCB93; --ok-soft:#15301F; --danger:#F08A8A;
+    --hypo:#F2809C; --hypo-soft:#3B1621;
+  --shadow:0 10px 30px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:560px;margin:0 auto;padding-inline:16px;padding-block:0 104px}
+
+/* topo */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 10px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.brand h1{margin:0;font-size:1.05rem;letter-spacing:.02em}
+.brand h1 span{color:var(--accent)}
+.unit{font-size:.8rem;color:var(--muted)}
+.datenav{display:flex;align-items:center;gap:8px;margin-top:10px}
+.iconbtn{flex:none;width:44px;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:grid;place-items:center;font-size:1.3rem;line-height:1}
+.iconbtn:disabled{opacity:.35;cursor:default}
+.datefield{position:relative;flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid var(--line);background:var(--surface);display:flex;align-items:center;justify-content:center;gap:8px;padding-inline:10px}
+.datefield strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.datefield input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.todaybtn{flex:none;height:44px;padding-inline:12px;border-radius:12px;border:0;background:var(--accent-soft);color:var(--accent);font-weight:700}
+
+.banner{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:.9rem}
+
+/* resumo do dia */
+.daystrip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:16px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.daystrip div{background:var(--surface);padding:10px 8px;text-align:center}
+.daystrip b{display:block;font-family:var(--mono);font-size:1.2rem;font-variant-numeric:tabular-nums}
+.daystrip small{color:var(--muted);font-size:.72rem;letter-spacing:.04em;text-transform:uppercase}
+
+/* refeições */
+.meals{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.meal{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:16px;padding:14px;display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center}
+.meal:hover{border-color:var(--accent)}
+.meal.now{border-color:var(--accent);box-shadow:inset 4px 0 0 var(--accent)}
+.meal-name{font-weight:700;font-size:1.05rem}
+.meal-hint{grid-column:1;color:var(--muted);font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.readings{grid-row:1 / span 2;grid-column:2;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.rd{display:grid;justify-items:center;min-width:48px;padding:4px 6px;border-radius:10px}
+.rd b{font-size:1.25rem;line-height:1.1}
+.rd small{font-family:var(--sans);font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.rd.a{background:var(--accent-soft)} .rd.a b{color:var(--accent)}
+.rd.d{background:var(--after-soft)} .rd.d b{color:var(--after)}
+.rd.i{background:var(--surface-2)}
+.rd.empty b{color:var(--muted);font-weight:500}
+.chip{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.78rem;font-weight:700;letter-spacing:.02em}
+.chip.now{background:var(--accent);color:var(--accent-ink)}
+.chip.wait{background:var(--warn-soft);color:var(--warn)}
+.chip.go{background:var(--warn);color:var(--surface)}
+.chip.done{background:var(--ok-soft);color:var(--ok)}
+.addlabel{grid-row:1 / span 2;grid-column:2;color:var(--accent);font-weight:700}
+
+.note{color:var(--muted);font-size:.82rem;margin-top:18px}
+
+/* seções */
+h2{font-size:1.15rem;margin:20px 0 4px;text-wrap:balance}
+.sub{color:var(--muted);margin:0 0 12px;font-size:.92rem}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 14px}
+.seg button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px}
+.dayhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:8px}
+.dayhead strong{text-transform:capitalize}
+.linkbtn{border:0;background:none;color:var(--accent);font-weight:700;padding:6px 0}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
+th{font-size:.7rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+th:first-child,td:first-child{text-align:left}
+td.food{text-align:left;color:var(--muted);min-width:9rem}
+tbody tr:last-child td{border-bottom:0}
+td.num,th.num{white-space:nowrap}
+.list{display:grid;gap:12px}
+.empty-state{padding:28px 16px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:16px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.stat b{display:block;font-family:var(--mono);font-size:1.35rem;font-variant-numeric:tabular-nums}
+.stat small{color:var(--muted);font-size:.75rem}
+.legend{display:flex;gap:14px;font-size:.82rem;color:var(--muted);margin:4px 0 2px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+svg.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--muted);font:11px var(--mono)}
+.chart .lbl{fill:var(--muted);font:11px var(--sans)}
+.chart .val{fill:var(--ink);font:10px var(--mono)}
+.chart .ba{fill:var(--accent)} .chart .bd{fill:var(--after)}
+.actions{display:grid;gap:10px;margin-top:16px}
+.btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.danger{color:var(--danger)}
+.copybox{width:100%;min-height:160px;margin-top:8px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);padding:10px;font-family:var(--mono);font-size:.8rem}
+
+/* hipoglicemia */
+.hipo-add{width:100%;margin-top:12px;height:50px;border-radius:14px;border:2px solid var(--hypo);background:var(--surface);color:var(--hypo);font-weight:700}
+.hipos{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.hipo-card{width:100%;text-align:left;border:1px solid var(--hypo);background:var(--hypo-soft);border-radius:14px;padding:12px 14px;display:grid;gap:4px}
+.hipo-card .top-line{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.hipo-card strong{color:var(--hypo)}
+.hipo-card .val{font-family:var(--mono);font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.hipo-card small{color:var(--muted);font-size:.85rem}
+.tag-hypo{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--hypo);color:var(--surface);font-size:.72rem;font-weight:700;letter-spacing:.03em}
+.stat.hypo b{color:var(--hypo)}
+.callout{margin-top:10px;padding:12px;border-radius:12px;background:var(--hypo-soft);color:var(--ink);font-size:.92rem;display:grid;gap:8px}
+.callout b{color:var(--hypo)}
+.plan{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px;white-space:pre-wrap;font-size:.92rem}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opt{position:relative}
+.opt input{position:absolute;opacity:0;width:1px;height:1px}
+.opt span{display:inline-block;padding:9px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);font-size:.9rem;font-weight:600;cursor:pointer}
+.opt input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.opt input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+.check{display:flex;align-items:center;gap:8px;font-size:.92rem}
+.check input{width:20px;height:20px;accent-color:var(--accent)}
+input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
+
+/* etiquetas e medições extras */
+.meal-tags{grid-row:3;grid-column:1 / -1;font-size:.8rem;color:var(--accent);font-weight:600}
+.tagline{display:block;color:var(--accent);font-size:.8rem;font-weight:600}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:22px}
+.section-head h3{margin:0;font-size:1rem}
+.btn.small{height:40px;border-radius:12px;padding-inline:14px;color:var(--accent);border-color:var(--accent)}
+.extras{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.extra-card{width:100%;text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:12px 14px;display:grid;gap:2px}
+.extra-card .top-line{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.extra-card .val{font-family:var(--mono);font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums}
+.extra-card small{color:var(--muted);font-size:.85rem}
+.empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
+
+/* fotos */
+.fotos{display:flex;gap:8px;flex-wrap:wrap}
+.foto{position:relative;width:84px;height:84px;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
+.foto-open{all:unset;display:block;width:100%;height:100%;cursor:zoom-in}
+.foto-open:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.foto img,.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.foto-rm{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.62);color:#fff;font-size:1.05rem;line-height:1;display:grid;place-items:center}
+.foto.loading{display:grid;place-items:center;color:var(--muted);font-size:.75rem;text-align:center}
+.foto-add{position:relative;width:84px;height:84px;border-radius:12px;border:1.5px dashed var(--accent);color:var(--accent);background:var(--bg);font-weight:700;font-size:.82rem;display:grid;place-items:center;text-align:center;cursor:pointer}
+.foto-add:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.foto-add input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.thumbs{display:flex;gap:6px;margin-top:6px}
+.thumbs button{width:52px;height:52px;padding:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:zoom-in}
+img.broken{object-fit:contain;opacity:.4}
+.lightbox{position:fixed;inset:0;z-index:30;background:rgba(5,12,14,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-bottom,0px))}
+.lightbox img{max-width:100%;max-height:78vh;border-radius:12px;background:#222}
+.lightbox .btn{min-width:140px}
+
+/* navegação inferior */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
+.tabs button{border:0;background:none;height:60px;font-weight:700;color:var(--muted);position:relative}
+.tabs button[aria-current="page"]{color:var(--accent)}
+.tabs button[aria-current="page"]::before{content:"";position:absolute;top:0;left:28%;right:28%;height:3px;border-radius:0 0 3px 3px;background:var(--accent)}
+
+/* folha de edição */
+.scrim{position:fixed;inset:0;z-index:10;background:rgba(8,20,22,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:560px;max-height:92%;overflow-y:auto;background:var(--surface);border-radius:20px 20px 0 0;box-shadow:var(--shadow);padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.sheet header{display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:6px}
+.sheet h3{margin:0;font-size:1.25rem}
+.sheet header p{margin:2px 0 0;color:var(--muted);font-size:.9rem}
+.field{display:grid;gap:6px;margin-top:14px}
+.field label{font-weight:700}
+.field .hint{font-size:.82rem;color:var(--muted)}
+.field .warn{font-size:.85rem;color:var(--warn);font-weight:600}
+.field .err{font-size:.85rem;color:var(--danger);font-weight:600}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.suffix{display:flex;align-items:center;border:1px solid var(--line);border-radius:12px;background:var(--bg);overflow:hidden}
+.suffix:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.suffix input{flex:1;min-width:0;border:0;background:none;height:54px;padding-inline:12px;font-family:var(--mono);font-size:1.5rem;font-variant-numeric:tabular-nums;outline:none}
+.suffix span{padding-right:12px;color:var(--muted);font-size:.85rem;white-space:nowrap}
+.in{border:1px solid var(--line);border-radius:12px;background:var(--bg);padding:10px 12px;width:100%}
+textarea.in{min-height:74px;resize:vertical}
+input.in{height:48px}
+.in:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 2px var(--accent-soft)}
+.group-label{margin-top:18px;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.sheet .actions{grid-template-columns:1fr 2fr}
+.confirm{margin-top:12px;padding:12px;border-radius:12px;background:var(--surface-2);display:grid;gap:10px}
+.confirm div{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+.toast{position:fixed;left:50%;bottom:calc(76px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:20;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-weight:700;box-shadow:var(--shadow);max-width:calc(100% - 32px);text-align:center}
+@media (prefers-reduced-motion: no-preference){
+  .sheet{animation:up .22s ease-out}
+  @keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+}
+@media (max-width:380px){
+  .rd{min-width:40px;padding:4px}
+  .rd b{font-size:1.08rem}
+  .daystrip b{font-size:1.05rem}
+}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><h1 id="brand">Diário de <span>Glicemia</span></h1><span class="unit">mg/dL · insulina em unidades</span></div>
+    <div class="datenav" id="datenav">
+      <button class="iconbtn" id="prev" aria-label="Dia anterior">‹</button>
+      <div class="datefield"><strong id="datelabel">—</strong><input type="date" id="datepick" aria-label="Escolher data"></div>
+      <button class="iconbtn" id="next" aria-label="Próximo dia">›</button>
+      <button class="todaybtn" id="gotoday" hidden>Hoje</button>
+    </div>
+  </header>
+  <div id="banner" class="banner" hidden></div>
+  <main id="view"></main>
+</div>
+
+<nav class="tabs" aria-label="Seções"><div>
+  <button data-tab="dia" aria-current="page">Registrar</button>
+  <button data-tab="historico">Histórico</button>
+  <button data-tab="resumo">Resumo</button>
+</div></nav>
+
+<div id="sheet-root"></div>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script>
+(function(){
+  const MEALS = [
+    {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
+    {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
+    {k:"almoco", n:"Almoço",        s:"Almoço", from:11.5,to:14.5},
+    {k:"tarde",  n:"Café da tarde", s:"Tarde",  from:14.5,to:18},
+    {k:"janta",  n:"Janta",         s:"Janta",  from:18, to:21},
+    {k:"ceia",   n:"Ceia",          s:"Ceia",   from:21, to:24}
+  ];
+  const SITUACOES = ["Antes de refeição","Depois de refeição","Atividade física","Dormindo / madrugada","Na escola","Outra"];
+  const SINTOMAS = ["Tremor","Suor","Palidez","Fome","Tontura","Choro / irritação","Sonolência","Confusão","Dor de cabeça","Visão embaçada","Sem sintomas"];
+  const ETIQUETAS = ["Brincou muito / atividade física","Festa / doce","Comeu fora de casa","Na escola","Doente / febre","Não comeu tudo","Comeu mais que o normal","Dormiu mal","Nervoso / agitado"];
+  const MOMENTOS = ["Ao acordar","Ao deitar","Madrugada","Antes de atividade física","Depois de atividade física","Passou mal","Outro"];
+  const LOCAL_KEY = "diario-glicemia-v1";
+  const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
+              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null };
+  const queues = {};
+
+  /* ---------- utilidades ---------- */
+  function pad(n){return String(n).padStart(2,"0")}
+  function isoOf(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())}
+  function todayIso(){return isoOf(new Date())}
+  function parseIso(iso){const [y,m,d]=iso.split("-").map(Number);return new Date(y,m-1,d)}
+  function addDays(iso,n){const d=parseIso(iso);d.setDate(d.getDate()+n);return isoOf(d)}
+  const fmtLong = new Intl.DateTimeFormat("pt-BR",{weekday:"long",day:"numeric",month:"long"});
+  const fmtShort = new Intl.DateTimeFormat("pt-BR",{weekday:"short",day:"2-digit",month:"2-digit"});
+  const fmtDM = new Intl.DateTimeFormat("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+  const cap=t=>t.charAt(0).toUpperCase()+t.slice(1);
+  function longDate(iso){return cap(fmtLong.format(parseIso(iso)))}
+  function shortDate(iso){return cap(fmtShort.format(parseIso(iso)).replace(".",""))}
+  function hhmm(ts){const d=new Date(ts);return pad(d.getHours())+":"+pad(d.getMinutes())}
+  function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+  function fmt(n,dec=0){if(n==null||!isFinite(n))return "–";return n.toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:dec})}
+  function parseNum(v){v=String(v).trim().replace(",",".");if(v==="")return null;const n=Number(v);return isFinite(n)?n:NaN}
+  function avg(a){return a.length?a.reduce((s,x)=>s+x,0)/a.length:null}
+  function has(v){return v!==null&&v!==undefined&&v!==""}
+  function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
+  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
+  const MAX_FOTOS=3;
+  function fotoUrl(id){return S.fotoUrls[id]||("/_blob/"+id)}
+  function thumbs(ids){return ids&&ids.length?`<span class="thumbs">${ids.map(id=>`<button type="button" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato" loading="lazy"></button>`).join("")}</span>`:""}
+  function hiposOf(iso){const d=S.days.get(iso);return (d&&Array.isArray(d.hipos)?d.hipos:[]).slice().sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
+  function extrasOf(iso){const d=S.days.get(iso);return (d&&Array.isArray(d.extras)?d.extras:[]).slice().sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
+  function dayHas(iso){return MEALS.some(x=>mealFilled(mealOf(iso,x.k)))||hiposOf(iso).length>0||extrasOf(iso).length>0}
+  function dayTags(iso){const t=new Set();MEALS.forEach(x=>{const m=mealOf(iso,x.k);(m&&m.tags||[]).forEach(g=>t.add(g))});return [...t]}
+  function extraValor(x){return x.lo?"LO":x.hi?"HI":has(x.valor)?fmt(+x.valor):"–"}
+  function nowHHMM(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
+  function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
+
+  const $ = id=>document.getElementById(id);
+  let toastTimer;
+  function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,2400)}
+
+  /* ---------- armazenamento ---------- */
+  function loadLocal(){
+    try{const raw=localStorage.getItem(LOCAL_KEY);if(raw){const o=JSON.parse(raw);S.days=new Map(Object.entries(o))}}catch(e){}
+    try{S.plano=localStorage.getItem(LOCAL_KEY+"-plano")||""}catch(e){}
+  }
+  function saveLocal(){
+    try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.fromEntries(S.days)));return true}catch(e){return false}
+  }
+  function persist(iso,body){
+    if(S.mode==="db"){
+      const ref=S.db.doc("dias/"+iso);
+      const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(()=>body?ref.set(body):ref.delete());
+      queues[iso]=job;
+      return job;
+    }
+    return saveLocal()?Promise.resolve():Promise.reject({code:"local"});
+  }
+
+  function saveNome(nome){
+    try{localStorage.setItem(LOCAL_KEY+"-nome",nome)}catch(e){}
+    if(S.mode==="db")return S.db.doc("config/crianca").set({nome,atualizadoEm:Date.now()});
+    return Promise.resolve();
+  }
+  function savePlano(texto){
+    if(S.mode==="db")return S.db.doc("config/plano").set({texto,atualizadoEm:Date.now()});
+    try{localStorage.setItem(LOCAL_KEY+"-plano",texto);return Promise.resolve()}catch(e){return Promise.reject({code:"local"})}
+  }
+
+  function startDb(){
+    let settled=false;
+    const fallback=()=>{if(settled)return;settled=true;S.mode="local";loadLocal();render()};
+    const use=window.claude&&window.claude.use;
+    if(!use){fallback();return}
+    window.claude.use("db").then(db=>{
+      if(!db){fallback();return}
+      settled=true;S.db=db;S.mode="db";render();
+      db.collection("dias").onSnapshot(snap=>{
+        const m=new Map();
+        snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});
+        S.days=m;
+        if(!S.editing)render(); else renderView();
+      },err=>{
+        S.mode="offline";render();
+      });
+      db.doc("config/crianca").onSnapshot(d=>{if(d.exists){S.nome=d.data().nome||"";renderTop();if(!S.editing)renderView()}},()=>{});
+      db.doc("config/plano").onSnapshot(d=>{S.plano=d.exists&&d.data().texto||"";if(!S.editing)renderView()},()=>{});
+    }).catch(fallback);
+    window.claude.use("assets").then(a=>{S.assets=a;if(S.fotoDraft)renderFotos()}).catch(()=>{});
+    window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
+  }
+
+  /* ---------- lógica de refeições ---------- */
+  function nowMealKey(){
+    const d=new Date();const h=d.getHours()+d.getMinutes()/60;
+    const m=MEALS.find(x=>h>=x.from&&h<x.to);return m?m.k:null;
+  }
+  function afterStatus(m){
+    if(!m||!has(m.antes)||has(m.depois)||!m.antesEm)return null;
+    const due=m.antesEm+2*3600e3, now=Date.now();
+    if(now<due)return {cls:"wait",txt:"2h às "+hhmm(due)};
+    if(now-due<3*3600e3)return {cls:"go",txt:"Medir 2h agora"};
+    return null;
+  }
+
+  /* ---------- render ---------- */
+  function render(){renderTop();renderView();renderSheet()}
+
+  function renderTop(){
+    const onDay=S.tab==="dia";
+    $("datenav").hidden=!onDay;
+    $("datelabel").textContent=longDate(S.date);
+    $("brand").innerHTML=S.nome?`Glicemia · <span>${esc(S.nome)}</span>`:`Diário de <span>Glicemia</span>`;
+    const dp=$("datepick");dp.value=S.date;dp.max=todayIso();
+    $("next").disabled=S.date>=todayIso();
+    $("gotoday").hidden=S.date===todayIso();
+    const b=$("banner");
+    if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador. Abra pelo link do Claude para salvar na nuvem."}
+    else if(S.mode==="offline"){b.hidden=false;b.textContent="Sem conexão com o armazenamento. Recarregue a página antes de registrar."}
+    else if(S.readOnly){b.hidden=false;b.textContent="Você pode ver os registros, mas não tem permissão para alterar. Peça acesso de edição a quem compartilhou."}
+    else b.hidden=true;
+    document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-current",x.dataset.tab===S.tab?"page":"false"));
+  }
+
+  function renderView(){
+    const v=$("view");
+    if(S.mode==="loading"){v.innerHTML='<p class="note">Carregando registros…</p>';return}
+    if(S.tab==="dia")v.innerHTML=viewDay();
+    else if(S.tab==="historico")v.innerHTML=viewHistory();
+    else v.innerHTML=viewSummary();
+  }
+
+  function rd(cls,val,label,dec){
+    return `<span class="rd ${cls}${has(val)?"":" empty"}"><b>${has(val)?fmt(Number(val),dec||0):"–"}</b><small>${label}</small></span>`;
+  }
+
+  function viewDay(){
+    const iso=S.date, isToday=iso===todayIso(), nowK=isToday?nowMealKey():null;
+    const ms=MEALS.map(x=>mealOf(iso,x.k));
+    const antes=ms.filter(m=>m&&has(m.antes)).map(m=>+m.antes);
+    const dep=ms.filter(m=>m&&has(m.depois)).map(m=>+m.depois);
+    const ins=ms.filter(m=>m&&has(m.insulina)).map(m=>+m.insulina);
+    const count=ms.filter(mealFilled).length;
+    let h=`<div class="daystrip">
+      <div><b>${count}/6</b><small>refeições</small></div>
+      <div><b>${fmt(avg(antes))}</b><small>média antes</small></div>
+      <div><b>${fmt(avg(dep))}</b><small>média 2h</small></div>
+      <div><b>${ins.length?fmt(ins.reduce((a,b)=>a+b,0),1):"–"}</b><small>insulina</small></div>
+    </div>`;
+    h+=`<button class="hipo-add" id="add-hipo">Registrar hipoglicemia</button>`;
+    const hs=hiposOf(iso);
+    if(hs.length){
+      h+=`<ul class="hipos">`+hs.map(x=>`<li><button class="hipo-card" data-hipo="${esc(x.id)}">
+        <span class="top-line"><strong>Hipoglicemia · ${esc(x.hora||"--:--")}</strong><span class="val">${esc(hipoValor(x))}${x.lo||!has(x.valor)?"":" <small>mg/dL</small>"}</span></span>
+        ${x.situacao?`<small>${esc(x.situacao)}</small>`:""}
+        ${has(x.tratamento)?`<small>Feito: ${esc(x.tratamento)}</small>`:""}
+        ${has(x.nova)?`<small>Nova medição: ${esc(fmt(+x.nova))} mg/dL${x.novaHora?" às "+esc(x.novaHora):""}</small>`:""}
+      </button></li>`).join("")+`</ul>`;
+    }
+    h+=`<ul class="meals">`;
+    MEALS.forEach((x,i)=>{
+      const m=ms[i], filled=mealFilled(m), st=afterStatus(m), isNow=x.k===nowK&&!filled;
+      let hint="";
+      if(st)hint=`<span class="chip ${st.cls}">${st.txt}</span>`;
+      else if(isNow)hint=`<span class="chip now">Agora</span>`;
+      else if(filled&&has(m.antes)&&has(m.depois))hint=`<span class="chip done">Completo</span>`;
+      const food=filled&&has(m.comeu)?` ${esc(m.comeu)}`:(filled?"":" Toque para registrar");
+      h+=`<li><button class="meal${isNow?" now":""}" data-meal="${x.k}">
+        <span class="meal-name">${x.n}</span>
+        <span class="meal-hint">${hint}${food}</span>
+        ${filled&&((m.tags||[]).length||(m.fotos||[]).length)?`<span class="meal-tags">${esc([...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])].join(" · "))}</span>`:""}
+        ${filled?`<span class="readings">${rd("a",m.antes,"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
+      </button></li>`;
+    });
+    h+=`</ul>`;
+    const xs=extrasOf(iso);
+    h+=`<div class="section-head"><h3>Outras medições</h3><button class="btn small" id="add-extra">+ Medição extra</button></div>`;
+    h+=xs.length?`<ul class="extras">`+xs.map(x=>`<li><button class="extra-card" data-extra="${esc(x.id)}">
+        <span class="top-line"><strong>${esc(x.hora||"--:--")}${x.momento?" · "+esc(x.momento):""}</strong><span class="val">${esc(extraValor(x))}${x.lo||x.hi||!has(x.valor)?"":" <small>mg/dL</small>"}</span></span>
+        ${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}</button></li>`).join("")+`</ul>`
+      :`<p class="empty-line">Ao acordar, ao deitar, de madrugada ou quando precisar medir fora das refeições.</p>`;
+    h+=`<p class="note">Toque numa refeição para anotar. Metas de glicemia, doses de insulina e decisões de tratamento seguem as orientações da equipe médica.</p>`;
+    return h;
+  }
+
+  function dayTable(iso){
+    let rows="";
+    MEALS.forEach(x=>{
+      const m=mealOf(iso,x.k);if(!mealFilled(m))return;
+      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${thumbs(m.fotos)}</td></tr>`;
+    });
+    let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
+    const xs=extrasOf(iso);
+    if(xs.length)out+=`<ul class="extras">`+xs.map(x=>`<li class="extra-card"><span class="top-line"><span>Medição extra <strong>${esc(x.hora||"")}</strong>${x.momento?" · "+esc(x.momento):""}</span><span class="val">${esc(extraValor(x))}</span></span>${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}</li>`).join("")+`</ul>`;
+    const hs=hiposOf(iso);
+    if(hs.length)out+=`<ul class="hipos">`+hs.map(x=>`<li class="hipo-card"><span class="top-line"><span><span class="tag-hypo">Hipoglicemia</span> <strong>${esc(x.hora||"")}</strong></span><span class="val">${esc(hipoValor(x))}</span></span>
+      ${x.situacao?`<small>${esc(x.situacao)}</small>`:""}${(x.sintomas||[]).length?`<small>Sintomas: ${esc(x.sintomas.join(", "))}</small>`:""}
+      ${has(x.tratamento)?`<small>Feito: ${esc(x.tratamento)}</small>`:""}${has(x.nova)?`<small>Nova medição: ${esc(fmt(+x.nova))} mg/dL${x.novaHora?" às "+esc(x.novaHora):""}</small>`:""}
+      ${has(x.obs)?`<small>Obs.: ${esc(x.obs)}</small>`:""}</li>`).join("")+`</ul>`;
+    return out;
+  }
+
+  function daysWithData(){
+    return [...S.days.keys()].filter(dayHas).sort().reverse();
+  }
+
+  function viewHistory(){
+    const used=new Set();daysWithData().forEach(iso=>dayTags(iso).forEach(t=>used.add(t)));
+    if(S.tagFilter&&!used.has(S.tagFilter))S.tagFilter=null;
+    const all=daysWithData().filter(iso=>!S.tagFilter||dayTags(iso).includes(S.tagFilter));
+    let h=`<h2>Histórico</h2><p class="sub">${all.length?`${all.length} ${all.length===1?"dia":"dias"} com registro, do mais recente para o mais antigo.`:"Nada registrado ainda."}</p>`;
+    if(used.size)h+=`<div class="seg" role="group" aria-label="Filtrar por etiqueta"><button data-tagf="" aria-pressed="${!S.tagFilter}">Todos os dias</button>${ETIQUETAS.filter(t=>used.has(t)).map(t=>`<button data-tagf="${esc(t)}" aria-pressed="${S.tagFilter===t}">${esc(t)}</button>`).join("")}</div>`;
+    if(!all.length)return h+`<div class="empty-state">Os dias registrados aparecem aqui, prontos para mostrar na consulta.</div>`;
+    h+=`<div class="list">`;
+    all.slice(0,S.histLimit).forEach(iso=>{
+      const ms=MEALS.map(x=>mealOf(iso,x.k)).filter(Boolean);
+      const a=avg(ms.filter(m=>has(m.antes)).map(m=>+m.antes)), d=avg(ms.filter(m=>has(m.depois)).map(m=>+m.depois));
+      h+=`<section class="card"><div class="dayhead"><strong>${esc(shortDate(iso))}</strong><span class="unit num">antes ${fmt(a)} · 2h ${fmt(d)}</span></div>${dayTable(iso)}
+        <button class="linkbtn" data-open="${iso}">Abrir este dia</button></section>`;
+    });
+    h+=`</div>`;
+    if(all.length>S.histLimit)h+=`<div class="actions"><button class="btn" id="more">Mostrar mais dias</button></div>`;
+    return h;
+  }
+
+  function computeSummary(){
+    const end=todayIso(), start=S.period?addDays(end,-(S.period-1)):"0000-00-00";
+    const isos=daysWithData().filter(i=>i>=start&&i<=end);
+    const rows=MEALS.map(x=>{
+      const a=[],d=[],ins=[],diff=[];
+      isos.forEach(iso=>{const m=mealOf(iso,x.k);if(!m)return;
+        if(has(m.antes))a.push(+m.antes); if(has(m.depois))d.push(+m.depois); if(has(m.insulina))ins.push(+m.insulina);
+        if(has(m.antes)&&has(m.depois))diff.push(m.depois-m.antes);});
+      return {x,na:a.length,nd:d.length,a:avg(a),d:avg(d),ins:avg(ins),diff:avg(diff),
+              amin:a.length?Math.min(...a):null,amax:a.length?Math.max(...a):null,dmin:d.length?Math.min(...d):null,dmax:d.length?Math.max(...d):null};
+    });
+    const allA=[],allD=[];
+    isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!m)return;if(has(m.antes))allA.push(+m.antes);if(has(m.depois))allD.push(+m.depois)}));
+    const first=isos.length?isos[isos.length-1]:null, last=isos.length?isos[0]:null;
+    const hipos=[];isos.slice().reverse().forEach(iso=>hiposOf(iso).forEach(x=>hipos.push(Object.assign({iso},x))));
+    const extras=[];isos.slice().reverse().forEach(iso=>extrasOf(iso).forEach(x=>extras.push(Object.assign({iso},x))));
+    const tags=ETIQUETAS.map(t=>{const a=[],d=[];let n=0;
+      isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!m||!(m.tags||[]).includes(t))return;n++;if(has(m.antes))a.push(+m.antes);if(has(m.depois))d.push(+m.depois)}));
+      return {t,n,a:avg(a),d:avg(d)}}).filter(r=>r.n>0);
+    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags};
+  }
+
+  function chart(rows){
+    const W=340,H=210,L=34,R=6,T=14,B=28,pw=W-L-R,ph=H-T-B;
+    const mx=Math.max(200,...rows.flatMap(r=>[r.a||0,r.d||0]));
+    const top=Math.ceil(mx/50)*50, step=top>300?100:50;
+    const y=v=>T+ph-(v/top)*ph, gw=pw/rows.length, bw=Math.min(18,gw*0.32);
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Média de glicemia antes e 2 horas depois, por refeição">`;
+    for(let v=0;v<=top;v+=step)s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+    rows.forEach((r,i)=>{
+      const cx=L+gw*i+gw/2;
+      [[r.a,"ba",-bw-1],[r.d,"bd",1]].forEach(([v,c,off])=>{
+        if(v==null)return;
+        s+=`<rect class="${c}" x="${cx+off}" y="${y(v)}" width="${bw}" height="${Math.max(0,y(0)-y(v))}" rx="3"/><text class="val" x="${cx+off+bw/2}" y="${y(v)-4}" text-anchor="middle">${Math.round(v)}</text>`;
+      });
+      s+=`<text class="lbl" x="${cx}" y="${H-10}" text-anchor="middle">${r.x.s}</text>`;
+    });
+    return s+`</svg>`;
+  }
+
+  function viewSummary(){
+    const R=computeSummary();
+    const opts=[[7,"7 dias"],[14,"14 dias"],[30,"30 dias"],[90,"90 dias"],[0,"Tudo"]];
+    let h=`<h2>Resumo para a consulta</h2><p class="sub">${R.first?`Registros de ${esc(fmtDM.format(parseIso(R.first)))} a ${esc(fmtDM.format(parseIso(R.last)))}.`:"Sem registros no período escolhido."}</p>
+      <div class="seg" role="group" aria-label="Período">${opts.map(([n,l])=>`<button data-period="${n}" aria-pressed="${S.period===n}">${l}</button>`).join("")}</div>`;
+    h+=`<div class="stats">
+      <div class="stat"><b>${R.isos.length}</b><small>dias com registro</small></div>
+      <div class="stat"><b>${fmt(avg(R.allA))}</b><small>média antes</small></div>
+      <div class="stat"><b>${fmt(avg(R.allD))}</b><small>média 2h depois</small></div>
+      <div class="stat hypo"><b>${R.hipos.length}</b><small>${R.hipos.length===1?"hipoglicemia registrada":"hipoglicemias registradas"}</small></div></div>`;
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`;
+    h+=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
+      <div class="field" style="margin-top:8px"><label for="rep-nome">Nome da criança</label>
+      <input class="in" id="rep-nome" autocomplete="off" value="${esc(S.nome)}" placeholder="Nome da criança"></div>
+      <p class="note" style="margin-top:6px">O nome aparece no topo do site e no PDF, em todos os aparelhos.</p>
+      <div class="actions">
+      <button class="btn primary" id="pdf"${S.busy?" disabled":""}>${S.busy?"Gerando relatório…":"Baixar relatório em PDF"}</button>
+      <button class="btn" id="csv">Baixar planilha (.csv)</button>
+      <button class="btn" id="copy">Copiar resumo em texto</button></div>
+      ${S.dlMsg?`<p class="banner" role="alert">${esc(S.dlMsg)}</p>`:""}
+      <p class="note" style="margin-top:10px">O PDF traz o período escolhido acima: médias por refeição, dois gráficos e o registro dia a dia.</p></section>`;
+    if(S.copyText!=null)h+=`<textarea class="copybox" id="copybox" readonly aria-label="Resumo em texto" style="margin:0 0 12px">${esc(S.copyText)}</textarea>`;
+    h+=`<section class="card"><div class="legend"><span><i style="background:var(--accent)"></i>Antes</span><span><i style="background:var(--after)"></i>2h depois</span><span>mg/dL</span></div>${chart(R.rows)}</section>`;
+    h+=`<section class="card" style="margin-top:12px"><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>média</th><th class="num">Antes<br>mín–máx</th><th class="num">2h<br>média</th><th class="num">2h<br>mín–máx</th><th class="num">Variação<br>média</th><th class="num">Insulina<br>média</th><th class="num">Medições</th></tr></thead><tbody>`;
+    R.rows.forEach(r=>{
+      h+=`<tr><td>${r.x.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${r.na?fmt(r.amin)+"–"+fmt(r.amax):"–"}</td><td class="num">${fmt(r.d)}</td><td class="num">${r.nd?fmt(r.dmin)+"–"+fmt(r.dmax):"–"}</td><td class="num">${r.diff==null?"–":(r.diff>0?"+":"")+fmt(r.diff)}</td><td class="num">${fmt(r.ins,1)}</td><td class="num">${r.na}/${r.nd}</td></tr>`;
+    });
+    h+=`</tbody></table></div><p class="note">Variação média = 2h depois − antes, só nas refeições com as duas medições. Medições = antes/2h.</p></section>`;
+    if(R.tags.length){
+      h+=`<section class="card" style="margin-top:12px"><strong>Refeições com etiqueta</strong><div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Etiqueta</th><th class="num">Refeições</th><th class="num">Antes<br>média</th><th class="num">2h<br>média</th></tr></thead><tbody>`+
+        R.tags.map(r=>`<tr><td>${esc(r.t)}</td><td class="num">${r.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${fmt(r.d)}</td></tr>`).join("")+
+        `</tbody></table></div><p class="note">Compare com a média geral do período: antes ${fmt(avg(R.allA))} · 2h depois ${fmt(avg(R.allD))} mg/dL.</p></section>`;
+    }
+    if(R.extras.length){
+      h+=`<section class="card" style="margin-top:12px"><strong>Outras medições no período</strong><div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Data</th><th class="num">Hora</th><th class="num">Glicemia</th><th>Momento</th><th>Observações</th></tr></thead><tbody>`+
+        R.extras.map(x=>`<tr><td>${esc(shortDate(x.iso))}</td><td class="num">${esc(x.hora||"")}</td><td class="num">${esc(extraValor(x))}</td><td class="food">${esc(x.momento||"")}</td><td class="food">${esc(x.obs||"")}</td></tr>`).join("")+
+        `</tbody></table></div><p class="note">Estas medições não entram nas médias por refeição.</p></section>`;
+    }
+    if(R.hipos.length){
+      h+=`<section class="card" style="margin-top:12px"><strong>Hipoglicemias no período</strong><div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Data</th><th class="num">Hora</th><th class="num">Glicemia</th><th>Situação</th><th>O que foi feito</th><th class="num">Nova medição</th></tr></thead><tbody>`+
+        R.hipos.map(x=>`<tr><td>${esc(shortDate(x.iso))}</td><td class="num">${esc(x.hora||"")}</td><td class="num">${esc(hipoValor(x))}</td><td class="food">${esc(x.situacao||"")}</td><td class="food">${esc(x.tratamento||"")}</td><td class="num">${has(x.nova)?esc(fmt(+x.nova))+(x.novaHora?" ("+esc(x.novaHora)+")":""):"–"}</td></tr>`).join("")+
+        `</tbody></table></div></section>`;
+    }
+    h+=`<p class="note">Este controle é para registro e acompanhamento. Metas, doses e decisões de tratamento seguem a equipe médica responsável.</p>`;
+    return h;
+  }
+
+  function summaryText(){
+    const R=computeSummary();
+    const per=R.first?`${fmtDM.format(parseIso(R.first))} a ${fmtDM.format(parseIso(R.last))}`:"sem registros";
+    let t=`Resumo da glicemia (${per})\nDias com registro: ${R.isos.length}\nMédia geral: antes ${fmt(avg(R.allA))} mg/dL · 2h depois ${fmt(avg(R.allD))} mg/dL\n\n`;
+    R.rows.forEach(r=>{if(!r.na&&!r.nd)return;
+      t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un\n`;});
+    if(R.tags.length){t+=`\nRefeições com etiqueta:\n`;R.tags.forEach(r=>{t+=`- ${r.t}: ${r.n} refeições · antes ${fmt(r.a)} · 2h ${fmt(r.d)}\n`})}
+    if(R.extras.length){t+=`\nOutras medições: ${R.extras.length}\n`;R.extras.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${extraValor(x)}${x.lo||x.hi||!has(x.valor)?"":" mg/dL"}${x.momento?" · "+x.momento:""}${has(x.obs)?" · "+x.obs:""}\n`})}
+    t+=`\nHipoglicemias registradas: ${R.hipos.length}\n`;
+    R.hipos.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${hipoValor(x)}${x.lo||!has(x.valor)?"":" mg/dL"}${x.situacao?" · "+x.situacao:""}${has(x.tratamento)?" · feito: "+x.tratamento:""}${has(x.nova)?" · nova medição "+fmt(+x.nova)+(x.novaHora?" às "+x.novaHora:""):""}\n`});
+    return t.trim();
+  }
+
+  function csv(){
+    const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    const n=(v,d)=>has(v)?Number(v).toLocaleString("pt-BR",{maximumFractionDigits:d||0,useGrouping:false}):"";
+    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas"].join(";")];
+    daysWithData().reverse().forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
+      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", ")].map(q).join(";"));}));
+    daysWithData().reverse().forEach(iso=>extrasOf(iso).forEach(x=>{
+      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"",""].map(q).join(";"));}));
+    daysWithData().reverse().forEach(iso=>hiposOf(iso).forEach(x=>{
+      const det=[x.situacao&&"Situação: "+x.situacao,(x.sintomas||[]).length&&"Sintomas: "+x.sintomas.join(", "),has(x.tratamento)&&"Feito: "+x.tratamento,
+        has(x.nova)&&"Nova medição: "+n(x.nova)+" mg/dL"+(x.novaHora?" às "+x.novaHora:""),has(x.obs)&&x.obs].filter(Boolean).join(" | ");
+      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,""].map(q).join(";"));}));
+    return "﻿"+lines.join("\r\n");
+  }
+
+  /* ---------- relatório PDF ---------- */
+  const PDF_LIBS=["https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js",
+                  "https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/5.0.8/jspdf.plugin.autotable.min.js"];
+  function loadScript(src){return new Promise((res,rej)=>{const s=document.createElement("script");s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+  async function ensurePdfLibs(){
+    if(!window.jspdf)await loadScript(PDF_LIBS[0]);
+    if(!window.autoTable&&!window.jspdf.jsPDF.API.autoTable)await loadScript(PDF_LIBS[1]);
+  }
+  function table(doc,opts){return window.autoTable?window.autoTable(doc,opts):doc.autoTable(opts)}
+
+  function buildPdf(){
+    const R=computeSummary();
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({unit:"mm",format:"a4"});
+    const W=210,M=14,CW=W-2*M;
+    const C={accent:[14,107,116],after:[181,84,42],ink:[21,38,42],muted:[86,107,110],line:[211,222,220],soft:[231,238,236],soft2:[242,246,245]};
+    const n0=v=>v==null||!isFinite(v)?"-":String(Math.round(v));
+    const n1=v=>v==null||!isFinite(v)?"-":v.toLocaleString("pt-BR",{maximumFractionDigits:1});
+    const dmy=iso=>fmtDM.format(parseIso(iso));
+    const now=new Date();
+
+    // cabeçalho
+    doc.setFont("helvetica","bold");doc.setFontSize(18);doc.setTextColor(...C.accent);doc.text("Diário de Glicemia",M,20);
+    doc.setFont("helvetica","normal");doc.setFontSize(10);doc.setTextColor(...C.muted);doc.text("Relatório para a equipe médica",M,26);
+    doc.setFontSize(9);doc.setTextColor(...C.ink);
+    const right=[];
+    if(S.nome)right.push("Paciente: "+S.nome);
+    right.push("Período: "+dmy(R.first)+" a "+dmy(R.last));
+    right.push("Gerado em "+fmtDM.format(now)+" às "+hhmm(now.getTime()));
+    right.forEach((t,i)=>doc.text(t,W-M,16+i*5,{align:"right"}));
+    doc.setDrawColor(...C.accent);doc.setLineWidth(0.6);doc.line(M,31,W-M,31);
+
+    // indicadores
+    const boxes=[["Dias com registro",String(R.isos.length)],["Média antes (mg/dL)",n0(avg(R.allA))],["Média 2h depois (mg/dL)",n0(avg(R.allD))],["Hipoglicemias registradas",String(R.hipos.length)]];
+    const bw=(CW-9)/4;
+    boxes.forEach(([l,v],i)=>{const x=M+i*(bw+3);doc.setFillColor(...C.soft2);doc.roundedRect(x,36,bw,18,2,2,"F");
+      doc.setFont("helvetica","bold");doc.setFontSize(14);doc.setTextColor(...C.ink);doc.text(v,x+4,45);
+      doc.setFont("helvetica","normal");doc.setFontSize(7.5);doc.setTextColor(...C.muted);doc.text(l,x+4,50.5)});
+
+    // tabela por refeição
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Médias por refeição",M,63);
+    table(doc,{startY:66,margin:{left:M,right:M},theme:"grid",
+      head:[["Refeição","Antes\nmédia","Antes\nmín-máx","2h depois\nmédia","2h depois\nmín-máx","Variação\nmédia","Insulina\nmédia (un.)","Medições\nantes/2h"]],
+      body:R.rows.map(r=>[r.x.n,n0(r.a),r.na?n0(r.amin)+"-"+n0(r.amax):"-",n0(r.d),r.nd?n0(r.dmin)+"-"+n0(r.dmax):"-",
+        r.diff==null?"-":(r.diff>0?"+":"")+n0(r.diff),n1(r.ins),r.na+"/"+r.nd]),
+      styles:{font:"helvetica",fontSize:8.5,cellPadding:1.8,lineColor:C.line,textColor:C.ink,halign:"center"},
+      headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold",fontSize:7.5},
+      columnStyles:{0:{halign:"left",fontStyle:"bold"}}});
+    let y=doc.lastAutoTable.finalY+4;
+    doc.setFont("helvetica","italic");doc.setFontSize(7);doc.setTextColor(...C.muted);
+    doc.text("Glicemias em mg/dL. Variação média = 2h depois - antes, só nas refeições com as duas medições.",M,y+1);
+
+    // gráficos
+    y+=9;
+    const gw=(CW-8)/2, gh=58;
+    const legend=(x,yy)=>{doc.setFontSize(7);doc.setFont("helvetica","normal");
+      doc.setFillColor(...C.accent);doc.rect(x,yy-2.2,2.5,2.5,"F");doc.setTextColor(...C.muted);doc.text("Antes",x+3.5,yy);
+      doc.setFillColor(...C.after);doc.rect(x+15,yy-2.2,2.5,2.5,"F");doc.text("2h depois",x+18.5,yy)};
+    const axis=(x,yy,w,h,lo,hi)=>{const step=(hi-lo)>250?100:50;doc.setLineWidth(0.2);doc.setDrawColor(...C.line);doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.setFont("helvetica","normal");
+      for(let v=lo;v<=hi;v+=step){const py=yy+h-(v-lo)/(hi-lo)*h;doc.line(x,py,x+w,py);doc.text(String(v),x-1.5,py+1,{align:"right"})}};
+
+    // barras por refeição
+    let x0=M+7,top=y+8,pw=gw-9,ph=gh-18;
+    doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...C.ink);doc.text("Média por refeição",M,y);legend(M+gw-35,y);
+    const bmax=Math.max(200,...R.rows.flatMap(r=>[r.a||0,r.d||0])),bhi=Math.ceil(bmax/50)*50;
+    axis(x0,top,pw,ph,0,bhi);
+    const g=pw/R.rows.length,bwid=Math.min(4.5,g*0.3);
+    R.rows.forEach((r,i)=>{const cx=x0+g*i+g/2;
+      [[r.a,C.accent,-bwid-0.3],[r.d,C.after,0.3]].forEach(([v,col,off])=>{if(v==null)return;
+        const py=top+ph-v/bhi*ph;doc.setFillColor(...col);doc.rect(cx+off,py,bwid,top+ph-py,"F");
+        doc.setFontSize(6);doc.setTextColor(...C.ink);doc.text(String(Math.round(v)),cx+off+bwid/2,py-1,{align:"center"})});
+      doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.text(r.x.s,cx,top+ph+4,{align:"center"})});
+
+    // evolução diária
+    x0=M+gw+8+7;
+    doc.setFont("helvetica","bold");doc.setFontSize(10);doc.setTextColor(...C.ink);doc.text("Evolução diária (média do dia)",M+gw+8,y);
+    const days=[];for(let i=R.first;i<=R.last;i=addDays(i,1))days.push(i);
+    const pts=days.map((iso,i)=>{const ms=MEALS.map(x=>mealOf(iso,x.k)).filter(Boolean);
+      return {i,a:avg(ms.filter(m=>has(m.antes)).map(m=>+m.antes)),d:avg(ms.filter(m=>has(m.depois)).map(m=>+m.depois))}});
+    const vals=pts.flatMap(p=>[p.a,p.d]).filter(v=>v!=null);
+    if(!vals.length)vals.push(100);
+    const lo=Math.max(0,Math.floor((Math.min(...vals)-10)/50)*50),hi=Math.max(lo+100,Math.ceil((Math.max(...vals)+10)/50)*50);
+    axis(x0,top,pw,ph,lo,hi);
+    const px=i=>x0+(days.length>1?i/(days.length-1)*pw:pw/2),py=v=>top+ph-(v-lo)/(hi-lo)*ph;
+    [["a",C.accent],["d",C.after]].forEach(([k,col])=>{const ps=pts.filter(p=>p[k]!=null);
+      doc.setDrawColor(...col);doc.setFillColor(...col);doc.setLineWidth(0.6);
+      for(let j=1;j<ps.length;j++)doc.line(px(ps[j-1].i),py(ps[j-1][k]),px(ps[j].i),py(ps[j][k]));
+      ps.forEach(p=>doc.circle(px(p.i),py(p[k]),0.8,"F"))});
+    const nt=Math.min(days.length,5);doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.setFont("helvetica","normal");
+    for(let t=0;t<nt;t++){const i=nt>1?Math.round(t*(days.length-1)/(nt-1)):0;const [,mm,dd]=days[i].split("-");doc.text(dd+"/"+mm,px(i),top+ph+4,{align:"center"})}
+
+    // hipoglicemias
+    y=top+ph+14;
+    if(R.hipos.length){
+      const HY=[176,37,74];
+      doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...HY);doc.text("Episódios de hipoglicemia ("+R.hipos.length+")",M,y);
+      table(doc,{startY:y+3,margin:{left:M,right:M,bottom:18},theme:"grid",
+        head:[["Data","Hora","Glicemia","Situação","Sintomas","O que foi feito","Nova medição"]],
+        body:R.hipos.map(x=>[shortDate(x.iso),x.hora||"",x.lo?"LO":has(x.valor)?n0(+x.valor):"não medida",x.situacao||"",(x.sintomas||[]).join(", "),
+          [x.tratamento,x.obs&&("Obs.: "+x.obs)].filter(Boolean).join("\n"),has(x.nova)?n0(+x.nova)+(x.novaHora?" ("+x.novaHora+")":""):"-"]),
+        styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,lineColor:C.line,textColor:C.ink,valign:"top"},
+        headStyles:{fillColor:HY,textColor:255,fontStyle:"bold"},
+        columnStyles:{0:{cellWidth:18,fontStyle:"bold"},1:{cellWidth:11,halign:"center"},2:{cellWidth:16,halign:"center",fontStyle:"bold"},3:{cellWidth:24},4:{cellWidth:32},6:{cellWidth:20,halign:"center"}}});
+      y=doc.lastAutoTable.finalY+10;
+      if(y>262){doc.addPage();y=20}
+    }
+
+    // etiquetas e medições extras
+    const section=(title,opts)=>{if(y>262){doc.addPage();y=20}
+      doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text(title,M,y);
+      table(doc,Object.assign({startY:y+3,margin:{left:M,right:M,bottom:18},theme:"grid",
+        styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,lineColor:C.line,textColor:C.ink,valign:"top"},
+        headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold"}},opts));
+      y=doc.lastAutoTable.finalY+10};
+    if(R.tags.length)section("Refeições com etiqueta",{head:[["Etiqueta","Refeições","Antes média","2h depois média"]],
+      body:R.tags.map(r=>[r.t,String(r.n),n0(r.a),n0(r.d)]),columnStyles:{1:{halign:"center"},2:{halign:"center"},3:{halign:"center"}}});
+    if(R.extras.length)section("Outras medições (fora das refeições; não entram nas médias)",{head:[["Data","Hora","Glicemia","Momento","Observações"]],
+      body:R.extras.map(x=>[shortDate(x.iso),x.hora||"",x.lo?"LO":x.hi?"HI":has(x.valor)?n0(+x.valor):"-",x.momento||"",x.obs||""]),
+      columnStyles:{0:{cellWidth:20,fontStyle:"bold"},1:{cellWidth:12,halign:"center"},2:{cellWidth:16,halign:"center"},3:{cellWidth:40}}});
+    if(y>262){doc.addPage();y=20}
+
+    // registro dia a dia
+    doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Registro dia a dia",M,y);
+    const body=[],dayIdx=[];
+    R.isos.slice().reverse().forEach((iso,di)=>{let first=true;
+      MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
+        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",m.comeu||"",[(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
+        dayIdx.push(di);first=false})});
+    table(doc,{startY:y+3,margin:{left:M,right:M,bottom:18},theme:"plain",
+      head:[["Data","Refeição","Antes","Insul.","2h dep.","O que comeu e bebeu","Observações"]],body,
+      styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,textColor:C.ink,valign:"top"},
+      headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold"},
+      columnStyles:{0:{cellWidth:20,fontStyle:"bold"},1:{cellWidth:24},2:{cellWidth:12,halign:"center"},3:{cellWidth:11,halign:"center"},4:{cellWidth:13,halign:"center"},6:{cellWidth:36,textColor:C.muted}},
+      didParseCell:d=>{if(d.section==="body"&&dayIdx[d.row.index]%2===1)d.cell.styles.fillColor=C.soft2},
+      willDrawCell:d=>{if(d.section==="body"&&d.row.cells[0].raw&&d.row.index>0){doc.setDrawColor(...C.line);doc.setLineWidth(0.3);doc.line(d.cell.x,d.cell.y,d.cell.x+d.cell.width,d.cell.y)}}});
+
+    // rodapé
+    const pages=doc.getNumberOfPages();
+    for(let p=1;p<=pages;p++){doc.setPage(p);doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor(...C.muted);
+      doc.text("Registro para acompanhamento. Metas de glicemia, doses de insulina e decisões de tratamento seguem a equipe médica responsável.",M,289);
+      doc.text("Página "+p+" de "+pages,W-M,289,{align:"right"})}
+    return doc.output("arraybuffer");
+  }
+
+  /* ---------- folha de edição ---------- */
+  function delBlock(label){
+    return `<div class="actions" style="grid-template-columns:1fr" id="del-wrap"><button type="button" class="btn danger" id="del">Apagar este registro</button></div>
+      <div class="confirm" id="del-confirm" hidden><strong>${label}</strong><div><button type="button" class="btn" id="del-no">Manter</button><button type="button" class="btn danger" id="del-yes">Apagar</button></div></div>`;
+  }
+
+  function renderSheet(){
+    const root=$("sheet-root");
+    if(!S.editing){root.innerHTML="";return}
+    if(S.editing.kind==="hipo"){renderHipoSheet(root);return}
+    if(S.editing.kind==="extra"){renderExtraSheet(root);return}
+    const {iso,k}=S.editing, x=MEALS.find(m=>m.k===k), m=mealOf(iso,k)||{};
+    const due=m.antesEm&&has(m.antes)?`Medir por volta das ${hhmm(m.antesEm+2*3600e3)}.`:"Duas horas após começar a refeição.";
+    const ro=S.readOnly||S.mode==="offline";
+    root.innerHTML=`<div class="scrim" id="scrim"><form class="sheet" id="form" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
+      <header><div><h3 id="sheet-title">${x.n}</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <div class="group-label">Antes da refeição</div>
+      <div class="pair">
+        <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
+        <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
+      </div>
+      <div class="field"><label for="f-comeu">O que comeu e bebeu</label><textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea></div>
+      <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
+        <div class="fotos" id="fotos"></div>
+        <div class="hint" id="fotos-hint">Fotografe só o prato, evite o rosto ${S.nome?"de "+esc(S.nome):"da criança"}. A localização da foto é removida antes de salvar.</div></div>
+      <div class="field"><span style="font-weight:700">Etiquetas <span class="hint">(toque para marcar)</span></span><div class="opts">
+        ${ETIQUETAS.map(t=>`<label class="opt"><input type="checkbox" name="f-tag" value="${esc(t)}" ${(m.tags||[]).includes(t)?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
+      <div class="group-label">Depois</div>
+      <div class="field"><label for="f-depois">Glicemia 2 horas depois</label><div class="suffix"><input id="f-depois" inputmode="numeric" autocomplete="off" value="${has(m.depois)?esc(m.depois):""}" placeholder="—"><span>mg/dL</span></div><div class="hint">${due}</div><div id="w-depois"></div></div>
+      <div class="field"><label for="f-obs">Observações <span class="hint">(se necessário)</span></label><textarea class="in" id="f-obs" rows="2" placeholder="Ex.: brincou no parque antes, comeu na escola">${esc(m.obs||"")}</textarea></div>
+      <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
+      ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
+    </form></div>`;
+    ["antes","depois"].forEach(f=>checkGlu(f));checkIns();
+    renderFotos();
+  }
+  function checkGlu(f){
+    const el=$("f-"+f),w=$("w-"+f);if(!el||!w)return true;
+    const v=parseNum(el.value);
+    if(Number.isNaN(v)){w.className="err";w.textContent="Use só números (ex.: 132).";return false}
+    if(v!=null&&(v<20||v>600)){w.className="warn";w.textContent="Valor fora do comum (20–600). Confira antes de salvar.";return true}
+    w.textContent="";return true;
+  }
+  function checkIns(){
+    const el=$("f-ins"),w=$("w-ins");if(!el||!w)return true;
+    const v=parseNum(el.value);
+    if(Number.isNaN(v)||(v!=null&&v<0)){w.className="err";w.textContent="Use só números (ex.: 4 ou 4,5).";return false}
+    if(v!=null&&v>30){w.className="warn";w.textContent="Valor alto para uma dose. Confira se não faltou a vírgula (ex.: 4,5).";return true}
+    w.textContent="";return true;
+  }
+
+  function renderHipoSheet(root){
+    const {iso,id}=S.editing, x=(id&&hiposOf(iso).find(h=>h.id===id))||{};
+    const hora=x.hora||(!id&&iso===todayIso()?nowHHMM():"");
+    const ro=S.readOnly||S.mode==="offline";
+    const sint=x.sintomas||[];
+    root.innerHTML=`<div class="scrim"><form class="sheet" id="hform" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
+      <header><div><h3 id="sheet-title" style="color:var(--hypo)">Hipoglicemia</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <div class="callout">
+        <div><b>Primeiro cuide ${S.nome?"de "+esc(S.nome):"da criança"}</b>, seguindo o plano da equipe médica. Registre depois, com calma.</div>
+        <div id="plano-view" ${S.plano?"":"hidden"}><div class="group-label" style="margin:0 0 4px">Plano da equipe médica</div><div class="plan" id="plano-text">${esc(S.plano)}</div></div>
+        <div id="plano-empty" class="hint" ${S.plano?"hidden":""}>Nenhum plano anotado. Peça à equipe médica o plano de hipoglicemia por escrito e copie aqui para tê-lo sempre à mão.</div>
+        <div id="plano-edit" hidden><label for="plano-in" class="group-label" style="margin:0">Plano da equipe médica</label>
+          <textarea class="in" id="plano-in" rows="6" placeholder="Copie aqui, exatamente, o plano escrito pela equipe médica">${esc(S.plano)}</textarea>
+          <div class="actions" style="grid-template-columns:1fr 1fr;margin-top:8px"><button type="button" class="btn" id="plano-cancel">Cancelar</button><button type="button" class="btn primary" id="plano-save">Salvar plano</button></div></div>
+        ${ro?"":`<button type="button" class="linkbtn" id="plano-edit-btn" style="justify-self:start">${S.plano?"Editar plano":"Anotar o plano da equipe médica"}</button>`}
+      </div>
+      <div class="pair">
+        <div class="field"><label for="h-hora">Horário</label><input class="in" type="time" id="h-hora" value="${esc(hora)}"><div id="w-hora"></div></div>
+        <div class="field"><label for="h-valor">Glicemia</label><div class="suffix"><input id="h-valor" inputmode="numeric" autocomplete="off" value="${has(x.valor)?esc(x.valor):""}" placeholder="—" ${x.lo?"disabled":""}><span>mg/dL</span></div><div id="w-valor"></div></div>
+      </div>
+      <label class="check" style="margin-top:10px"><input type="checkbox" id="h-lo" ${x.lo?"checked":""}> O aparelho mostrou “LO”</label>
+      <div class="field"><span style="font-weight:700">Situação</span><div class="opts" role="radiogroup" aria-label="Situação">
+        ${SITUACOES.map((t,i)=>`<label class="opt"><input type="radio" name="h-sit" value="${esc(t)}" ${x.situacao===t?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
+      <div class="field"><span style="font-weight:700">Sintomas <span class="hint">(marque quantos quiser)</span></span><div class="opts">
+        ${SINTOMAS.map(t=>`<label class="opt"><input type="checkbox" name="h-sin" value="${esc(t)}" ${sint.includes(t)?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
+      <div class="field"><label for="h-trat">O que foi feito</label><textarea class="in" id="h-trat" rows="2" placeholder="Descreva o que foi feito, quanto e a que horas">${esc(x.tratamento||"")}</textarea></div>
+      <div class="group-label">Depois</div>
+      <div class="pair">
+        <div class="field"><label for="h-nova">Nova medição</label><div class="suffix"><input id="h-nova" inputmode="numeric" autocomplete="off" value="${has(x.nova)?esc(x.nova):""}" placeholder="—"><span>mg/dL</span></div><div id="w-nova"></div></div>
+        <div class="field"><label for="h-novahora">Horário</label><input class="in" type="time" id="h-novahora" value="${esc(x.novaHora||"")}"></div>
+      </div>
+      <div class="field"><label for="h-obs">Observações <span class="hint">(se necessário)</span></label><textarea class="in" id="h-obs" rows="2" placeholder="Ex.: estava brincando, não quis comer no lanche">${esc(x.obs||"")}</textarea></div>
+      <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
+      ${id&&!ro?delBlock("Apagar este registro de hipoglicemia?"):""}
+    </form></div>`;
+    checkHipo(false);
+  }
+  function checkHipo(strict){
+    let ok=true;
+    const hw=$("w-hora");
+    if(strict&&!$("h-hora").value){hw.className="err";hw.textContent="Informe o horário.";ok=false}else hw.textContent="";
+    const lo=$("h-lo").checked, vw=$("w-valor"), v=lo?null:parseNum($("h-valor").value);
+    if(Number.isNaN(v)){vw.className="err";vw.textContent="Use só números (ex.: 58).";ok=false}
+    else if(v!=null&&(v<20||v>600)){vw.className="warn";vw.textContent="Valor fora do comum. Confira antes de salvar."}
+    else vw.textContent="";
+    const nw=$("w-nova"), n=parseNum($("h-nova").value);
+    if(Number.isNaN(n)){nw.className="err";nw.textContent="Use só números.";ok=false}
+    else if(n!=null&&(n<20||n>600)){nw.className="warn";nw.textContent="Valor fora do comum. Confira."}
+    else nw.textContent="";
+    return ok;
+  }
+  function submitHipo(){
+    if(!checkHipo(true)){toast("Corrija os campos marcados");return}
+    const {iso,id}=S.editing, prev=(id&&hiposOf(iso).find(h=>h.id===id))||{};
+    const lo=$("h-lo").checked;
+    const sit=document.querySelector('input[name="h-sit"]:checked');
+    const h={id:id||("h"+Date.now().toString(36)),hora:$("h-hora").value,valor:lo?null:parseNum($("h-valor").value),lo:lo||null,
+      situacao:sit?sit.value:"",sintomas:[...document.querySelectorAll('input[name="h-sin"]:checked')].map(i=>i.value),
+      tratamento:$("h-trat").value.trim(),nova:parseNum($("h-nova").value),novaHora:$("h-novahora").value,obs:$("h-obs").value.trim(),
+      criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
+    const clean={};Object.entries(h).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
+    const list=hiposOf(iso).filter(x=>x.id!==clean.id);list.push(clean);
+    writeDay(iso,{hipos:list});
+  }
+  function showPlanoEdit(on){
+    $("plano-edit").hidden=!on;
+    const btn=$("plano-edit-btn");if(btn)btn.hidden=on;
+    $("plano-view").hidden=on||!S.plano;$("plano-empty").hidden=on||!!S.plano;
+    if(on)$("plano-in").focus();
+  }
+
+  function renderExtraSheet(root){
+    const {iso,id}=S.editing, x=(id&&extrasOf(iso).find(e=>e.id===id))||{};
+    const hora=x.hora||(!id&&iso===todayIso()?nowHHMM():"");
+    const ro=S.readOnly||S.mode==="offline";
+    root.innerHTML=`<div class="scrim"><form class="sheet" id="xform" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
+      <header><div><h3 id="sheet-title">Medição extra</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <p class="hint" style="margin:6px 0 0">Para medições fora das refeições. Não entra nas médias por refeição.</p>
+      <div class="pair">
+        <div class="field"><label for="x-hora">Horário</label><input class="in" type="time" id="x-hora" value="${esc(hora)}"><div id="w-xhora"></div></div>
+        <div class="field"><label for="x-valor">Glicemia</label><div class="suffix"><input id="x-valor" inputmode="numeric" autocomplete="off" value="${has(x.valor)?esc(x.valor):""}" placeholder="—" ${x.lo||x.hi?"disabled":""}><span>mg/dL</span></div><div id="w-xvalor"></div></div>
+      </div>
+      <div class="opts" style="margin-top:10px">
+        <label class="check"><input type="checkbox" id="x-lo" ${x.lo?"checked":""}> Aparelho mostrou “LO”</label>
+        <label class="check"><input type="checkbox" id="x-hi" ${x.hi?"checked":""}> Aparelho mostrou “HI”</label>
+      </div>
+      <div class="field"><span style="font-weight:700">Momento</span><div class="opts" role="radiogroup" aria-label="Momento">
+        ${MOMENTOS.map(t=>`<label class="opt"><input type="radio" name="x-mom" value="${esc(t)}" ${x.momento===t?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
+      <div class="field"><label for="x-obs">Observações <span class="hint">(se necessário)</span></label><textarea class="in" id="x-obs" rows="2" placeholder="Ex.: acordou com sede, estava resfriado">${esc(x.obs||"")}</textarea></div>
+      <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
+      ${id&&!ro?delBlock("Apagar esta medição?"):""}
+    </form></div>`;
+    checkExtra(false);
+  }
+  function checkExtra(strict){
+    let ok=true;
+    const hw=$("w-xhora");
+    if(strict&&!$("x-hora").value){hw.className="err";hw.textContent="Informe o horário.";ok=false}else hw.textContent="";
+    const fixed=$("x-lo").checked||$("x-hi").checked, vw=$("w-xvalor"), v=fixed?null:parseNum($("x-valor").value);
+    if(Number.isNaN(v)){vw.className="err";vw.textContent="Use só números (ex.: 180).";ok=false}
+    else if(strict&&!fixed&&v==null){vw.className="err";vw.textContent="Informe a glicemia ou marque LO/HI.";ok=false}
+    else if(v!=null&&(v<20||v>600)){vw.className="warn";vw.textContent="Valor fora do comum. Confira antes de salvar."}
+    else vw.textContent="";
+    return ok;
+  }
+  function submitExtra(){
+    if(!checkExtra(true)){toast("Corrija os campos marcados");return}
+    const {iso,id}=S.editing, prev=(id&&extrasOf(iso).find(e=>e.id===id))||{};
+    const lo=$("x-lo").checked, hi=$("x-hi").checked, mom=document.querySelector('input[name="x-mom"]:checked');
+    const x={id:id||("x"+Date.now().toString(36)),hora:$("x-hora").value,valor:lo||hi?null:parseNum($("x-valor").value),lo:lo||null,hi:hi||null,
+      momento:mom?mom.value:"",obs:$("x-obs").value.trim(),criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
+    const clean={};Object.entries(x).forEach(([a,b])=>{if(has(b))clean[a]=b});
+    const list=extrasOf(iso).filter(e=>e.id!==clean.id);list.push(clean);
+    writeDay(iso,{extras:list});
+  }
+
+  function openExtra(iso,id){S.editing={kind:"extra",iso,id:id||null};renderSheet()}
+  function renderFotos(){
+    const box=$("fotos"), d=S.fotoDraft;if(!box||!d)return;
+    const ro=S.readOnly||S.mode==="offline", canAdd=!!S.assets&&!ro;
+    box.innerHTML=d.cur.map(id=>`<div class="foto"><button type="button" class="foto-open" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato"></button>${canAdd?`<button type="button" class="foto-rm" data-rmfoto="${esc(id)}" aria-label="Remover foto">×</button>`:""}</div>`).join("")
+      +(d.busy?`<div class="foto loading">Enviando…</div>`:"")
+      +(canAdd&&!d.busy&&d.cur.length<MAX_FOTOS?`<label class="foto-add">+ Foto<input type="file" id="f-foto" accept="image/*" aria-label="Adicionar foto do prato"></label>`:"");
+    if(!canAdd&&!d.cur.length)box.innerHTML=`<span class="hint">Fotos não disponíveis nesta tela. Abra pelo link do Claude, com permissão de edição.</span>`;
+  }
+  function withTimeout(p,ms,code){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej({code}),ms))])}
+  async function loadImage(file){
+    if(window.createImageBitmap){try{return await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){}}
+    const src=URL.createObjectURL(file);
+    return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=()=>rej({code:"decode"});img.src=src})
+      .finally(()=>setTimeout(()=>URL.revokeObjectURL(src),1000));
+  }
+  async function compressImage(file){
+    try{
+      const img=await withTimeout(loadImage(file),20000,"decode");
+      const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,sc=Math.min(1,1280/Math.max(w,h));
+      const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*sc));c.height=Math.max(1,Math.round(h*sc));
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      if(img.close)img.close();
+      return await withTimeout(new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej({code:"decode"}),"image/jpeg",0.82)),20000,"decode");
+    }catch(e){throw e&&e.code?e:{code:"decode"}}
+  }
+  async function addFoto(file){
+    const d=S.fotoDraft;if(!d||!S.assets||!file)return;
+    if(d.cur.length>=MAX_FOTOS){toast("Limite de "+MAX_FOTOS+" fotos por refeição");return}
+    d.busy=true;renderFotos();
+    try{
+      const blob=await compressImage(file);
+      const r=await withTimeout(S.assets.upload(blob,{type:"image/jpeg"}),90000,"timeout");
+      if(S.fotoDraft!==d){S.assets.delete(r.id).catch(()=>{});return}
+      S.fotoUrls[r.id]=r.url;d.cur.push(r.id);d.novos.push(r.id);
+    }catch(err){
+      const c=err&&err.code;
+      toast(c==="decode"?"Não foi possível abrir esta foto. Tente outra ou tire uma nova."
+        :c==="too_large"?"Foto grande demais. Tente outra."
+        :c==="quota_or_state"?"O espaço para fotos está cheio."
+        :c==="rate_limited"?"Muitos envios seguidos. Aguarde um pouco e tente de novo."
+        :"Não foi possível enviar a foto. Tente de novo.");
+    }finally{if(S.fotoDraft===d){d.busy=false;renderFotos()}}
+  }
+  function removeFotoDraft(id){
+    const d=S.fotoDraft;if(!d)return;
+    d.cur=d.cur.filter(x=>x!==id);
+    if(d.novos.includes(id)){d.novos=d.novos.filter(x=>x!==id);S.assets&&S.assets.delete(id).catch(()=>{})}
+    renderFotos();
+  }
+  function discardDraft(){
+    const d=S.fotoDraft;S.fotoDraft=null;
+    if(d&&S.assets)d.novos.forEach(id=>S.assets.delete(id).catch(()=>{}));
+  }
+  function deleteAssets(ids){if(S.assets)ids.forEach(id=>S.assets.delete(id).catch(()=>{}))}
+  function openLightbox(id){
+    closeLightbox();
+    const el=document.createElement("div");el.className="lightbox";el.id="lightbox";el.setAttribute("role","dialog");el.setAttribute("aria-label","Foto do prato");
+    el.innerHTML=`<img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato"><button type="button" class="btn" id="lb-close">Fechar</button>`;
+    document.body.appendChild(el);$("lb-close").focus();
+  }
+  function closeLightbox(){const el=$("lightbox");if(el)el.remove()}
+
+  function openEditor(iso,k){
+    const m=mealOf(iso,k)||{};
+    S.fotoDraft={orig:[...(m.fotos||[])],cur:[...(m.fotos||[])],novos:[],busy:false};
+    S.editing={kind:"meal",iso,k};renderSheet();
+  }
+  function openHipo(iso,id){S.editing={kind:"hipo",iso,id:id||null};renderSheet()}
+  function closeEditor(){S.editing=null;renderSheet();renderView()}
+
+  async function writeDay(iso,patch){
+    const had=S.days.get(iso);
+    const next=Object.assign({refeicoes:{},hipos:[],extras:[]},had||{},patch,{data:iso});
+    const any=Object.keys(next.refeicoes||{}).length>0||(next.hipos||[]).length>0||(next.extras||[]).length>0;
+    const body=any?Object.assign(next,{atualizadoEm:Date.now()}):null;
+    if(body)S.days.set(iso,body);else S.days.delete(iso);
+    closeEditor();
+    try{await persist(iso,body);toast(body?"Registro salvo":"Registro apagado");return true}
+    catch(e){
+      if(had)S.days.set(iso,had);else S.days.delete(iso);
+      if(e&&e.code==="invalid_argument"){S.readOnly=true;toast("Sem permissão para salvar")}
+      else if(e&&e.code==="quota_exceeded")toast("Armazenamento cheio. Baixe a planilha e peça para arquivar dias antigos.");
+      else toast("Não foi possível salvar. Tente de novo.");
+      render();
+      return false;
+    }
+  }
+
+  async function submit(){
+    const d=S.fotoDraft;
+    if(d&&d.busy){toast("Aguarde a foto terminar de enviar");return}
+    const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns();
+    if(!okA||!okD||!okI){toast("Corrija os campos marcados");return}
+    const {iso,k}=S.editing, prev=mealOf(iso,k)||{};
+    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),depois:parseNum($("f-depois").value),
+             comeu:$("f-comeu").value.trim(),obs:$("f-obs").value.trim(),
+             tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value),
+             fotos:d?d.cur.slice():(prev.fotos||[])};
+    if(has(m.antes))m.antesEm=has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null);
+    const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
+    const day=S.days.get(iso), ref=Object.assign({},day&&day.refeicoes);
+    if(mealFilled(clean)){clean.atualizadoEm=Date.now();ref[k]=clean}else delete ref[k];
+    S.fotoDraft=null;
+    const ok=await writeDay(iso,{refeicoes:ref});
+    if(d){const kept=ref[k]&&ref[k].fotos||[];
+      if(ok)deleteAssets(d.orig.filter(id=>!kept.includes(id)));
+      else deleteAssets(d.novos);}
+  }
+
+  const DL_MSG="Esta tela do Claude não permite baixar arquivos. Abra o link no navegador (Chrome ou Safari, em claude.ai) e toque de novo. Enquanto isso, use \"Copiar resumo em texto\".";
+  async function getDownloads(){
+    if(!S.downloads&&window.claude&&window.claude.use){try{S.downloads=await window.claude.use("downloads")}catch(e){}}
+    S.dlMsg=S.downloads?null:DL_MSG;
+    renderView();
+    return S.downloads;
+  }
+
+  /* ---------- eventos ---------- */
+  document.addEventListener("click",async e=>{
+    const t=e.target.closest("button");if(!t)return;
+    if(t.id==="lb-close"){closeLightbox();return}
+    if(t.dataset.foto){openLightbox(t.dataset.foto);return}
+    if(t.dataset.rmfoto){removeFotoDraft(t.dataset.rmfoto);return}
+    if(t.dataset.tab){S.tab=t.dataset.tab;S.copyText=null;render();window.scrollTo(0,0);return}
+    if(t.dataset.meal){openEditor(S.date,t.dataset.meal);return}
+    if(t.dataset.hipo){openHipo(S.date,t.dataset.hipo);return}
+    if(t.dataset.extra){openExtra(S.date,t.dataset.extra);return}
+    if(t.dataset.tagf!==undefined){S.tagFilter=t.dataset.tagf||null;S.histLimit=20;renderView();return}
+    if(t.dataset.open){S.date=t.dataset.open;S.tab="dia";render();window.scrollTo(0,0);return}
+    if(t.dataset.period!==undefined){S.period=Number(t.dataset.period);S.copyText=null;renderView();return}
+    switch(t.id){
+      case "prev":S.date=addDays(S.date,-1);render();break;
+      case "next":if(S.date<todayIso()){S.date=addDays(S.date,1);render()}break;
+      case "gotoday":S.date=todayIso();render();break;
+      case "more":S.histLimit+=20;renderView();break;
+      case "close":case "cancel":discardDraft();closeEditor();break;
+      case "add-hipo":openHipo(S.date,null);break;
+      case "add-extra":openExtra(S.date,null);break;
+      case "del":$("del-wrap").hidden=true;$("del-confirm").hidden=false;break;
+      case "del-no":$("del-wrap").hidden=false;$("del-confirm").hidden=true;break;
+      case "del-yes":{
+        const ed=S.editing;
+        if(ed.kind==="hipo")writeDay(ed.iso,{hipos:hiposOf(ed.iso).filter(x=>x.id!==ed.id)});
+        else if(ed.kind==="extra")writeDay(ed.iso,{extras:extrasOf(ed.iso).filter(x=>x.id!==ed.id)});
+        else{const ref=Object.assign({},S.days.get(ed.iso)?.refeicoes);delete ref[ed.k];
+          const d=S.fotoDraft;S.fotoDraft=null;
+          writeDay(ed.iso,{refeicoes:ref}).then(ok=>{if(!d)return;deleteAssets(ok?[...new Set([...d.orig,...d.novos])]:d.novos)})}
+        break}
+      case "plano-edit-btn":showPlanoEdit(true);break;
+      case "plano-cancel":$("plano-in").value=S.plano;showPlanoEdit(false);break;
+      case "plano-save":{
+        const txt=$("plano-in").value.trim();
+        try{await savePlano(txt);S.plano=txt;$("plano-text").textContent=txt;$("plano-edit-btn").textContent=txt?"Editar plano":"Anotar o plano da equipe médica";showPlanoEdit(false);toast("Plano salvo")}
+        catch(err){toast(err&&err.code==="invalid_argument"?"Sem permissão para salvar":"Não foi possível salvar o plano. Tente de novo.")}
+        break}
+      case "copy":{
+        const txt=summaryText();
+        try{await navigator.clipboard.writeText(txt);toast("Resumo copiado");S.copyText=null;renderView()}
+        catch(err){S.copyText=txt;renderView();const b=$("copybox");if(b){b.focus();b.select()}toast("Selecione o texto e copie")}
+        break}
+      case "pdf":{
+        if(S.busy)break;
+        const dl=await getDownloads();if(!dl)break;
+        S.busy=true;renderView();
+        let buf;
+        try{await ensurePdfLibs();buf=buildPdf()}
+        catch(err){S.busy=false;renderView();toast("Não foi possível montar o relatório. Verifique a internet e tente de novo.");break}
+        S.busy=false;renderView();
+        try{await dl.save({filename:`relatorio-glicemia-${todayIso()}.pdf`,data:buf});toast("Relatório baixado")}
+        catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
+        break}
+      case "csv":{
+        const dl=await getDownloads();if(!dl)break;
+        try{await dl.save({filename:`glicemia-${todayIso()}.csv`,data:csv()});toast("Planilha baixada")}
+        catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
+        break}
+    }
+  });
+  document.addEventListener("submit",e=>{if(e.target.id==="form"){e.preventDefault();submit()}else if(e.target.id==="hform"){e.preventDefault();submitHipo()}else if(e.target.id==="xform"){e.preventDefault();submitExtra()}});
+  document.addEventListener("input",e=>{
+    const id=e.target.id;
+    if(id==="rep-nome")return;
+    if(id==="x-valor"||id==="x-hora"){checkExtra(false);return}
+    if(id==="h-valor"||id==="h-nova"||id==="h-hora"){checkHipo(false);return}
+    if(id==="f-antes")checkGlu("antes");else if(id==="f-depois")checkGlu("depois");else if(id==="f-ins")checkIns();
+  });
+  document.addEventListener("change",async e=>{
+    const id=e.target.id;
+    if(id==="f-foto"){const f=e.target.files&&e.target.files[0];e.target.value="";addFoto(f);return}
+    if(id==="x-lo"||id==="x-hi"){const other=$(id==="x-lo"?"x-hi":"x-lo");if(e.target.checked)other.checked=false;const v=$("x-valor");v.disabled=$("x-lo").checked||$("x-hi").checked;if(v.disabled)v.value="";checkExtra(false);return}
+    if(id==="rep-nome"){const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
+      try{await saveNome(nome);toast(nome?"Nome salvo":"Nome removido")}catch(err){S.nome=antes;renderTop();toast("Não foi possível salvar o nome")}return}
+    if(e.target.id==="h-lo"){const v=$("h-valor");v.disabled=e.target.checked;if(e.target.checked)v.value="";checkHipo(false)}});
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("lightbox"))closeLightbox()});
+  document.addEventListener("error",e=>{const t=e.target;if(t&&t.tagName==="IMG"&&t.dataset.foto&&!t.classList.contains("broken")){t.classList.add("broken");t.alt="Foto indisponível"}},true);
+  $("datepick").addEventListener("change",e=>{const v=e.target.value;if(v&&v<=todayIso()){S.date=v;render()}});
+
+  setInterval(()=>{if(S.tab==="dia"&&!S.editing){if(S.date>todayIso())S.date=todayIso();renderView()}},60000);
+
+  try{S.nome=localStorage.getItem(LOCAL_KEY+"-nome")||""}catch(e){}
+  render();
+  startDb();
+})();
+</script>
