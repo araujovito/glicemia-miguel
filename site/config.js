@@ -4,6 +4,6 @@
 // A chave pública pode ficar no site: quem protege os dados são as regras de acesso do banco
 // (supabase/migrations). Nunca coloque aqui a chave secreta (service_role / secret).
 window.DIARIO_CONFIG = {
-  supabaseUrl: "",
-  supabaseAnonKey: ""
+  supabaseUrl: "https://xvrgwnduqvviirutdhra.supabase.co",
+  supabaseAnonKey: "sb_publishable__OIkPnYfrohQCTvmE3slOw_05vxfllr"
 };

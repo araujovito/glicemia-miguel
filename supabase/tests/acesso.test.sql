@@ -1,6 +1,8 @@
 -- Regras de acesso do diário, testadas como cada papel. Rode com: npx supabase test db
 begin;
 create extension if not exists pgtap with schema extensions;
+-- No projeto remoto, o usuário da CLI não tem "extensions" no search_path (no local tem).
+set local search_path to public, extensions;
 select plan(39);
 
 -- Pessoas: Ana cria o diário; Bia é convidada como cuidadora; Caio como leitor; Davi não tem acesso.
