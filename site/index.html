@@ -162,6 +162,8 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .extra-card .top-line{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .extra-card .val{font-family:var(--mono);font-weight:700;font-size:1.15rem;font-variant-numeric:tabular-nums}
 .extra-card small{color:var(--muted);font-size:.85rem}
+.por{color:var(--muted);font-weight:400}
+.autoria{font-size:.82rem}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
 /* fotos */
@@ -302,6 +304,20 @@ input.in{height:48px}
   // Quem criou e quem alterou por último: só o id opaco da plataforma (nunca o nome, que muda e varia por quem vê).
   // Sem identidade (modo local, visitante sem conta), nada é gravado.
   function autoria(prev){const o={};const c=prev.criadoPor||S.uid;if(c)o.criadoPor=c;if(S.uid)o.atualizadoPor=S.uid;return o}
+  // Lugar para o nome de quem anotou; o nome é resolvido depois, em fillNames, e entra como texto.
+  function nomeSpan(id,pre,pos){return id?`<span class="por" data-uid="${esc(id)}" data-pre="${esc(pre||"")}" data-pos="${esc(pos||"")}" hidden></span>`:""}
+  function autoriaLinha(rec){
+    if(!rec||!rec.criadoPor)return "";
+    const alt=rec.atualizadoPor&&rec.atualizadoPor!==rec.criadoPor, quando=rec.atualizadoEm?" às "+hhmm(rec.atualizadoEm):"";
+    return `<p class="autoria">${nomeSpan(rec.criadoPor,"Anotado por ",alt?"":quando)}${alt?nomeSpan(rec.atualizadoPor," · alterado por ",quando):""}</p>`;
+  }
+  async function fillNames(){
+    const els=[...document.querySelectorAll("[data-uid]")];if(!S.user||!els.length)return;
+    const ps=await S.user.profiles([...new Set(els.map(e=>e.dataset.uid))]);
+    els.forEach(e=>{const p=ps[e.dataset.uid], n=p&&(p.isMe?"você":p.name);
+      if(!n){e.hidden=true;return}
+      e.textContent=e.dataset.pre+n+e.dataset.pos;e.hidden=false});
+  }
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
   const $ = id=>document.getElementById(id);
@@ -366,6 +382,7 @@ input.in{height:48px}
     window.claude.use("user").then(u=>{
       if(!u)return;S.user=u;
       u.id().then(id=>{S.uid=id});
+      fillNames();
       // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
       u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
     }).catch(()=>{});
@@ -409,6 +426,7 @@ input.in{height:48px}
     if(S.tab==="dia")v.innerHTML=viewDay();
     else if(S.tab==="historico")v.innerHTML=viewHistory();
     else v.innerHTML=viewSummary();
+    fillNames();
   }
 
   function rd(cls,val,label,dec){
@@ -436,6 +454,7 @@ input.in{height:48px}
         ${x.situacao?`<small>${esc(x.situacao)}</small>`:""}
         ${has(x.tratamento)?`<small>Feito: ${esc(x.tratamento)}</small>`:""}
         ${has(x.nova)?`<small>Nova medição: ${esc(fmt(+x.nova))} mg/dL${x.novaHora?" às "+esc(x.novaHora):""}</small>`:""}
+        ${x.criadoPor?`<small>${nomeSpan(x.criadoPor,"Anotado por ")}</small>`:""}
       </button></li>`).join("")+`</ul>`;
     }
     h+=`<ul class="meals">`;
@@ -449,7 +468,8 @@ input.in{height:48px}
       h+=`<li><button class="meal${isNow?" now":""}" data-meal="${x.k}">
         <span class="meal-name">${x.n}</span>
         <span class="meal-hint">${hint}${food}</span>
-        ${filled&&((m.tags||[]).length||(m.fotos||[]).length)?`<span class="meal-tags">${esc([...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])].join(" · "))}</span>`:""}
+        ${filled?(()=>{const it=[...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
+          return it.length||m.criadoPor?`<span class="meal-tags">${esc(it.join(" · "))}${nomeSpan(m.criadoPor,it.length?" · por ":"por ")}</span>`:""})():""}
         ${filled?`<span class="readings">${rd("a",m.antes,"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
       </button></li>`;
     });
@@ -458,7 +478,7 @@ input.in{height:48px}
     h+=`<div class="section-head"><h3>Outras medições</h3><button class="btn small" id="add-extra">+ Medição extra</button></div>`;
     h+=xs.length?`<ul class="extras">`+xs.map(x=>`<li><button class="extra-card" data-extra="${esc(x.id)}">
         <span class="top-line"><strong>${esc(x.hora||"--:--")}${x.momento?" · "+esc(x.momento):""}</strong><span class="val">${esc(extraValor(x))}${x.lo||x.hi||!has(x.valor)?"":" <small>mg/dL</small>"}</span></span>
-        ${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}</button></li>`).join("")+`</ul>`
+        ${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}${x.criadoPor?`<small>${nomeSpan(x.criadoPor,"Anotado por ")}</small>`:""}</button></li>`).join("")+`</ul>`
       :`<p class="empty-line">Ao acordar, ao deitar, de madrugada ou quando precisar medir fora das refeições.</p>`;
     h+=`<p class="note">Toque numa refeição para anotar. Metas de glicemia, doses de insulina e decisões de tratamento seguem as orientações da equipe médica.</p>`;
     return h;
@@ -468,16 +488,16 @@ input.in{height:48px}
     let rows="";
     MEALS.forEach(x=>{
       const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${thumbs(m.fotos)}</td></tr>`;
+      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
     });
     let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
     const xs=extrasOf(iso);
-    if(xs.length)out+=`<ul class="extras">`+xs.map(x=>`<li class="extra-card"><span class="top-line"><span>Medição extra <strong>${esc(x.hora||"")}</strong>${x.momento?" · "+esc(x.momento):""}</span><span class="val">${esc(extraValor(x))}</span></span>${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}</li>`).join("")+`</ul>`;
+    if(xs.length)out+=`<ul class="extras">`+xs.map(x=>`<li class="extra-card"><span class="top-line"><span>Medição extra <strong>${esc(x.hora||"")}</strong>${x.momento?" · "+esc(x.momento):""}</span><span class="val">${esc(extraValor(x))}</span></span>${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}${x.criadoPor?`<small>${nomeSpan(x.criadoPor,"Anotado por ")}</small>`:""}</li>`).join("")+`</ul>`;
     const hs=hiposOf(iso);
     if(hs.length)out+=`<ul class="hipos">`+hs.map(x=>`<li class="hipo-card"><span class="top-line"><span><span class="tag-hypo">Hipoglicemia</span> <strong>${esc(x.hora||"")}</strong></span><span class="val">${esc(hipoValor(x))}</span></span>
       ${x.situacao?`<small>${esc(x.situacao)}</small>`:""}${(x.sintomas||[]).length?`<small>Sintomas: ${esc(x.sintomas.join(", "))}</small>`:""}
       ${has(x.tratamento)?`<small>Feito: ${esc(x.tratamento)}</small>`:""}${has(x.nova)?`<small>Nova medição: ${esc(fmt(+x.nova))} mg/dL${x.novaHora?" às "+esc(x.novaHora):""}</small>`:""}
-      ${has(x.obs)?`<small>Obs.: ${esc(x.obs)}</small>`:""}</li>`).join("")+`</ul>`;
+      ${has(x.obs)?`<small>Obs.: ${esc(x.obs)}</small>`:""}${x.criadoPor?`<small>${nomeSpan(x.criadoPor,"Anotado por ")}</small>`:""}</li>`).join("")+`</ul>`;
     return out;
   }
 
@@ -778,7 +798,7 @@ input.in{height:48px}
     const due=m.antesEm&&has(m.antes)?`Medir por volta das ${hhmm(m.antesEm+2*3600e3)}.`:"Duas horas após começar a refeição.";
     const ro=S.readOnly||S.mode==="offline";
     root.innerHTML=`<div class="scrim" id="scrim"><form class="sheet" id="form" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
-      <header><div><h3 id="sheet-title">${x.n}</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <header><div><h3 id="sheet-title">${x.n}</h3><p>${esc(longDate(iso))}</p>${autoriaLinha(m)}</div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
       <div class="group-label">Antes da refeição</div>
       <div class="pair">
         <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
@@ -797,7 +817,7 @@ input.in{height:48px}
       ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
     </form></div>`;
     ["antes","depois"].forEach(f=>checkGlu(f));checkIns();
-    renderFotos();
+    renderFotos();fillNames();
   }
   function checkGlu(f){
     const el=$("f-"+f),w=$("w-"+f);if(!el||!w)return true;
@@ -820,7 +840,7 @@ input.in{height:48px}
     const ro=S.readOnly||S.mode==="offline";
     const sint=x.sintomas||[];
     root.innerHTML=`<div class="scrim"><form class="sheet" id="hform" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
-      <header><div><h3 id="sheet-title" style="color:var(--hypo)">Hipoglicemia</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <header><div><h3 id="sheet-title" style="color:var(--hypo)">Hipoglicemia</h3><p>${esc(longDate(iso))}</p>${autoriaLinha(x)}</div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
       <div class="callout">
         <div><b>Primeiro cuide ${S.nome?"de "+esc(S.nome):"da criança"}</b>, seguindo o plano da equipe médica. Registre depois, com calma.</div>
         <div id="plano-view" ${S.plano?"":"hidden"}><div class="group-label" style="margin:0 0 4px">Plano da equipe médica</div><div class="plan" id="plano-text">${esc(S.plano)}</div></div>
@@ -849,7 +869,7 @@ input.in{height:48px}
       <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
       ${id&&!ro?delBlock("Apagar este registro de hipoglicemia?"):""}
     </form></div>`;
-    checkHipo(false);
+    checkHipo(false);fillNames();
   }
   function checkHipo(strict){
     let ok=true;
@@ -889,7 +909,7 @@ input.in{height:48px}
     const hora=x.hora||(!id&&iso===todayIso()?nowHHMM():"");
     const ro=S.readOnly||S.mode==="offline";
     root.innerHTML=`<div class="scrim"><form class="sheet" id="xform" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
-      <header><div><h3 id="sheet-title">Medição extra</h3><p>${esc(longDate(iso))}</p></div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
+      <header><div><h3 id="sheet-title">Medição extra</h3><p>${esc(longDate(iso))}</p>${autoriaLinha(x)}</div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>
       <p class="hint" style="margin:6px 0 0">Para medições fora das refeições. Não entra nas médias por refeição.</p>
       <div class="pair">
         <div class="field"><label for="x-hora">Horário</label><input class="in" type="time" id="x-hora" value="${esc(hora)}"><div id="w-xhora"></div></div>
@@ -905,7 +925,7 @@ input.in{height:48px}
       <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
       ${id&&!ro?delBlock("Apagar esta medição?"):""}
     </form></div>`;
-    checkExtra(false);
+    checkExtra(false);fillNames();
   }
   function checkExtra(strict){
     let ok=true;
