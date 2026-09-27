@@ -273,7 +273,8 @@ input.in{height:48px}
   const MOMENTOS = ["Ao acordar","Ao deitar","Madrugada","Antes de atividade física","Depois de atividade física","Passou mal","Outro"];
   const LOCAL_KEY = "diario-glicemia-v1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
-              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null };
+              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null,
+              backup:{fotos:true,busy:false,msg:null} };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -610,7 +611,7 @@ input.in{height:48px}
       <div class="stat"><b>${fmt(avg(R.allA))}</b><small>média antes</small></div>
       <div class="stat"><b>${fmt(avg(R.allD))}</b><small>média 2h depois</small></div>
       <div class="stat hypo"><b>${R.hipos.length}</b><small>${R.hipos.length===1?"hipoglicemia registrada":"hipoglicemias registradas"}</small></div></div>`;
-    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`;
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+backupCard();
     h+=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
       <div class="field" style="margin-top:8px"><label for="rep-nome">Nome da criança</label>
       <input class="in" id="rep-nome" autocomplete="off" value="${esc(S.nome)}" placeholder="Nome da criança"></div>
@@ -643,6 +644,7 @@ input.in{height:48px}
         R.hipos.map(x=>`<tr><td>${esc(shortDate(x.iso))}</td><td class="num">${esc(x.hora||"")}</td><td class="num">${esc(hipoValor(x))}</td><td class="food">${esc(x.situacao||"")}</td><td class="food">${esc(x.tratamento||"")}</td><td class="num">${has(x.nova)?esc(fmt(+x.nova))+(x.novaHora?" ("+esc(x.novaHora)+")":""):"–"}</td></tr>`).join("")+
         `</tbody></table></div></section>`;
     }
+    h+=backupCard();
     h+=`<p class="note">Este controle é para registro e acompanhamento. Metas, doses e decisões de tratamento seguem a equipe médica responsável.</p>`;
     return h;
   }
@@ -673,6 +675,49 @@ input.in{height:48px}
         has(x.nova)&&"Nova medição: "+n(x.nova)+" mg/dL"+(x.novaHora?" às "+x.novaHora:""),has(x.obs)&&x.obs].filter(Boolean).join(" | ");
       lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,""].map(q).join(";"));}));
     return "﻿"+lines.join("\r\n");
+  }
+
+  /* ---------- cópia de segurança ---------- */
+  // Um arquivo .json com tudo o que o site guarda: dias, nome, plano da equipe médica e, se marcado, as fotos (em base64).
+  // Serve para não depender de uma única conta: o arquivo fica com a família.
+  const BACKUP_FORMATO="diario-glicemia-backup";
+  function backupCard(){
+    const B=S.backup, n=daysWithData().length;
+    return `<section class="card" style="margin-top:12px"><strong>Cópia de segurança</strong>
+      <p class="note" style="margin-top:6px">Baixa um arquivo com todos os registros${n?` (${n} ${n===1?"dia":"dias"})`:""}, o nome e o plano da equipe médica. Guarde fora do celular, por exemplo no e-mail ou no Google Drive.</p>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="bk-fotos" ${B.fotos?"checked":""}> Incluir as fotos dos pratos <span class="hint">(arquivo maior)</span></label>
+      <div class="actions"><button class="btn" id="bk-export"${B.busy||!n?" disabled":""}>Baixar cópia de segurança</button></div>
+      <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p></section>`;
+  }
+  function setBackupMsg(msg){S.backup.msg=msg;const el=$("bk-msg");if(el){el.textContent=msg||"";el.hidden=!msg}}
+  function blobToDataUrl(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)})}
+  function fotosDoDia(d){const ids=[];Object.values(d&&d.refeicoes||{}).forEach(m=>(m&&m.fotos||[]).forEach(id=>ids.push(id)));return ids}
+  async function exportBackup(){
+    const B=S.backup;if(B.busy)return;
+    const dl=await getDownloads();if(!dl)return;
+    B.busy=true;renderView();
+    try{
+      const dias={};daysWithData().forEach(iso=>{dias[iso]=S.days.get(iso)});
+      const fotos={};let faltaram=0;
+      if(B.fotos){
+        const ids=[...new Set(Object.values(dias).flatMap(fotosDoDia))];
+        for(let i=0;i<ids.length;i++){
+          setBackupMsg(`Copiando as fotos: ${i+1} de ${ids.length}…`);
+          try{const r=await fetch(fotoUrl(ids[i]));if(!r.ok)throw 0;fotos[ids[i]]=await blobToDataUrl(await r.blob())}catch(e){faltaram++}
+        }
+      }
+      const copia={formato:BACKUP_FORMATO,versao:1,exportadoEm:new Date().toISOString(),nome:S.nome||"",plano:S.plano||"",dias,fotos};
+      setBackupMsg("Preparando o arquivo…");
+      await dl.save({filename:`copia-glicemia-${todayIso()}.json`,data:new Blob([JSON.stringify(copia)],{type:"application/json"})});
+      const nd=Object.keys(dias).length, nf=Object.keys(fotos).length;
+      setBackupMsg(`Cópia baixada: ${nd} ${nd===1?"dia":"dias"}${B.fotos?`, ${nf} ${nf===1?"foto":"fotos"}`:", sem fotos"}.${faltaram?` ${faltaram} ${faltaram===1?"foto não pôde ser copiada":"fotos não puderam ser copiadas"}.`:""}`);
+    }catch(err){
+      const c=err&&err.code;
+      if(c==="declined")setBackupMsg(null);
+      else if(c==="too_large")setBackupMsg("O arquivo ficou grande demais para esta tela. Tente de novo sem as fotos.");
+      else if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;setBackupMsg(null)}
+      else setBackupMsg("Não foi possível baixar a cópia agora. Tente de novo.");
+    }finally{B.busy=false;renderView()}
   }
 
   /* ---------- relatório PDF ---------- */
@@ -1163,6 +1208,7 @@ input.in{height:48px}
         try{await dl.save({filename:`relatorio-glicemia-${todayIso()}.pdf`,data:buf});toast("Relatório baixado")}
         catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
         break}
+      case "bk-export":exportBackup();break;
       case "csv":{
         const dl=await getDownloads();if(!dl)break;
         try{await dl.save({filename:`glicemia-${todayIso()}.csv`,data:csv()});toast("Planilha baixada")}
@@ -1181,6 +1227,7 @@ input.in{height:48px}
   });
   document.addEventListener("change",async e=>{
     const id=e.target.id;
+    if(id==="bk-fotos"){S.backup.fotos=e.target.checked;return}
     if(id==="f-foto"){const f=e.target.files&&e.target.files[0];e.target.value="";addFoto(f);return}
     if(id==="x-lo"||id==="x-hi"){const other=$(id==="x-lo"?"x-hi":"x-lo");if(e.target.checked)other.checked=false;const v=$("x-valor");v.disabled=$("x-lo").checked||$("x-hi").checked;if(v.disabled)v.value="";checkExtra(false);return}
     if(id==="rep-nome"){const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
