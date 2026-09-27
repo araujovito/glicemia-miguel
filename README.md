@@ -14,7 +14,11 @@ O projeto tem duas partes, que funcionam de forma independente:
 ## Estrutura
 
 ```
-site/index.html                                 Site (HTML, CSS e JS num único arquivo, sem build)
+site/index.html                                 Site (HTML, CSS e a interface, sem build)
+site/logic.js                                   Funções puras (cálculos, junções, validação), testáveis sem navegador
+site/sw.js, manifest.webmanifest, icon.svg      Instalação como aplicativo, só fora do Claude
+tests/                                          Testes: lógica, navegador (modo local) e modo compartilhado
+VALIDACAO.md                                    Roteiro manual antes de liberar para a família
 planilha/gerar_planilha.py                      Script que monta a planilha a partir da folha A4
 planilha/modelo_folha_A4.xlsx                   Folha diária original, para imprimir e preencher à mão
 planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vazia)
@@ -87,7 +91,7 @@ Se essas capacidades não estiverem disponíveis, o site entra em **modo local**
 ### Como usar
 
 - **Testar no computador:** abra `site/index.html` no navegador. Ele roda em modo local.
-- **Usar de verdade:** publique o `index.html` como Artifact no claude.ai com as capacidades `db`, `assets`, `downloads` e `user`. Depois é só abrir o link no celular.
+- **Usar de verdade:** publique como Artifact no claude.ai com as capacidades `db`, `assets`, `downloads` e `user`, e **publique o `logic.js` junto**, como arquivo de apoio no mesmo caminho relativo (`logic.js`, ao lado da página). Se só o `index.html` for publicado, o site mostra um aviso de que falta o `logic.js` e não carrega. Mantenha a regra de acesso do banco já publicada (`read`/`write` em `interact`). O `sw.js`, o manifesto e o ícone não precisam ir: dentro do Claude, o site não registra o service worker. Depois é só abrir o link no celular.
 - **Compartilhar com a família:** compartilhe o Artifact pelo claude.ai.
   - Quem vai registrar precisa de permissão para **editar**.
   - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
@@ -142,11 +146,16 @@ pip install openpyxl
 python planilha/gerar_planilha.py
 ```
 
-Para executar os testes da lógica compartilhada do site:
+Para executar os testes (precisa do Playwright: `npm install`):
 
 ```bash
-npm test
+npm test                    # tudo
+npm run test:unit           # só a lógica (logic.js), sem navegador
+npm run test:browser        # navegador no modo local e na demonstração
+npm run test:compartilhado  # navegador no modo compartilhado, com banco simulado e duas pessoas
 ```
+
+Os testes do modo compartilhado simulam o banco do Claude com as mesmas regras do real (update mescla e exige que o documento exista) e seguram a entrega das gravações, para reproduzir dois aparelhos salvando ao mesmo tempo.
 
 O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 
