@@ -1001,7 +1001,7 @@ input.in{height:48px}
   }
 
   function backupCard(){
-    const B=S.backup, n=daysWithData().length, ro=S.readOnly||S.mode==="offline"||S.mode==="loading";
+    const B=S.backup, n=daysWithData().length+[...S.sensor.keys()].filter(k=>!dayHas(k)).length, ro=S.readOnly||S.mode==="offline"||S.mode==="loading";
     return `<section class="card" style="margin-top:12px"><strong>Cópia de segurança</strong>
       <p class="note" style="margin-top:6px">Baixa um arquivo com todos os registros${n?` (${n} ${n===1?"dia":"dias"})`:""}, o nome e o plano da equipe médica. Guarde fora do celular, por exemplo no e-mail ou no Google Drive.</p>
       <label class="check" style="margin-top:8px"><input type="checkbox" id="bk-fotos" ${B.fotos?"checked":""}> Incluir as fotos dos pratos <span class="hint">(arquivo maior)</span></label>
@@ -1027,11 +1027,12 @@ input.in{height:48px}
           try{const r=await fetch(fotoUrl(ids[i]));if(!r.ok)throw 0;fotos[ids[i]]=await blobToDataUrl(await r.blob())}catch(e){faltaram++}
         }
       }
-      const copia={formato:BACKUP_FORMATO,versao:1,exportadoEm:new Date().toISOString(),nome:S.nome||"",plano:S.plano||"",dias,fotos};
+      const sensor={};S.sensor.forEach((d,iso)=>{if((d.min||[]).length)sensor[iso]=d});
+      const copia={formato:BACKUP_FORMATO,versao:1,exportadoEm:new Date().toISOString(),nome:S.nome||"",plano:S.plano||"",dias,fotos,sensor};
       setBackupMsg("Preparando o arquivo…");
       await dl.save({filename:`copia-glicemia-${todayIso()}.json`,data:new Blob([JSON.stringify(copia)],{type:"application/json"})});
-      const nd=Object.keys(dias).length, nf=Object.keys(fotos).length;
-      setBackupMsg(`Cópia baixada: ${nd} ${nd===1?"dia":"dias"}${B.fotos?`, ${nf} ${nf===1?"foto":"fotos"}`:", sem fotos"}.${faltaram?` ${faltaram} ${faltaram===1?"foto não pôde ser copiada":"fotos não puderam ser copiadas"}.`:""}`);
+      const nd=Object.keys(dias).length, nf=Object.keys(fotos).length, ns=Object.keys(sensor).length;
+      setBackupMsg(`Cópia baixada: ${nd} ${nd===1?"dia":"dias"}${B.fotos?`, ${nf} ${nf===1?"foto":"fotos"}`:", sem fotos"}${ns?`, ${ns} ${ns===1?"dia":"dias"} de sensor`:""}.${faltaram?` ${faltaram} ${faltaram===1?"foto não pôde ser copiada":"fotos não puderam ser copiadas"}.`:""}`);
     }catch(err){
       const c=err&&err.code;
       if(c==="declined")setBackupMsg(null);
@@ -1052,7 +1053,15 @@ input.in{height:48px}
     // O arquivo vem de fora: só entram chaves de data válidas, dias em forma de objeto e fotos em data URL de imagem.
     Object.entries(c.dias).forEach(([iso,d])=>{if(/^\d{4}-\d{2}-\d{2}$/.test(iso)&&d&&typeof d==="object"&&!Array.isArray(d))dias[iso]=d});
     Object.entries(c.fotos||{}).forEach(([id,u])=>{if(typeof u==="string"&&/^data:image\/(jpeg|png|webp);base64,/.test(u))fotos[id]=u});
-    return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,fotos};
+    const sensor={};
+    Object.entries(c.sensor&&typeof c.sensor==="object"?c.sensor:{}).forEach(([iso,d])=>{
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)||!d||!Array.isArray(d.min)||!Array.isArray(d.mg)||d.min.length!==d.mg.length)return;
+      const num=a=>Array.isArray(a)&&a.every(v=>typeof v==="number"&&isFinite(v));
+      if(!num(d.min)||!num(d.mg)||(d.tipo&&!num(d.tipo)))return;
+      const m=new Map();d.min.forEach((min,i)=>{const tipo=d.tipo?d.tipo[i]:0;m.set(min*10+tipo,{min,mg:d.mg[i],tipo})});
+      sensor[iso]=m;
+    });
+    return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,fotos,sensor};
   }
   function planejarRestauracao(c){
     const novos=[],trocar=[],manter=[];
@@ -1061,16 +1070,19 @@ input.in{height:48px}
       else if((+c.dias[iso].atualizadoEm||0)>(+S.days.get(iso).atualizadoEm||0))trocar.push(iso);
       else manter.push(iso);
     });
-    return {c,novos,trocar,manter};
+    // Sensor: entra o dia em que a cópia acrescenta alguma leitura (juntar nunca apaga).
+    const sensor=Object.keys(c.sensor).sort().filter(iso=>{const a=S.sensor.get(iso);return juntarSensor(a,c.sensor[iso]).min.length>((a&&a.min)||[]).length});
+    return {c,novos,trocar,manter,sensor};
   }
   function planoHtml(P){
     const q=n=>n===1?"1 dia":n+" dias", quando=P.c.exportadoEm&&!isNaN(new Date(P.c.exportadoEm))?" de "+fmtDM.format(new Date(P.c.exportadoEm)):"";
-    const nada=!P.novos.length&&!P.trocar.length;
+    const nada=!P.novos.length&&!P.trocar.length&&!P.sensor.length;
     return `<div class="confirm"><strong>Cópia${esc(quando)}: ${q(Object.keys(P.c.dias).length)}</strong>
       ${nada?`<span>Nada a restaurar: tudo o que está na cópia já está aqui.</span>`:`<ul class="restore-plan">
         ${P.novos.length?`<li>${q(P.novos.length)} que não ${P.novos.length===1?"existe":"existem"} aqui ${P.novos.length===1?"será adicionado":"serão adicionados"}.</li>`:""}
         ${P.trocar.length?`<li>${q(P.trocar.length)} ${P.trocar.length===1?"será trocado":"serão trocados"} pela versão da cópia, que foi alterada depois.</li>`:""}
-        ${P.manter.length?`<li>${q(P.manter.length)} ${P.manter.length===1?"fica":"ficam"} como ${P.manter.length===1?"está":"estão"}, porque a versão daqui é igual ou mais recente.</li>`:""}</ul>`}
+        ${P.manter.length?`<li>${q(P.manter.length)} ${P.manter.length===1?"fica":"ficam"} como ${P.manter.length===1?"está":"estão"}, porque a versão daqui é igual ou mais recente.</li>`:""}
+        ${P.sensor.length?`<li>${q(P.sensor.length)} de sensor ${P.sensor.length===1?"recebe":"recebem"} leituras da cópia (nada é apagado).</li>`:""}</ul>`}
       <div>${nada?`<button type="button" class="btn" id="bk-cancel" style="grid-column:1 / -1">Fechar</button>`
         :`<button type="button" class="btn" id="bk-cancel">Cancelar</button><button type="button" class="btn primary" id="bk-restore">Restaurar</button>`}</div></div>`;
   }
@@ -1103,11 +1115,20 @@ input.in{height:48px}
           catch(e){if(e&&e.code==="invalid_argument"){S.readOnly=true;throw "Sem permissão para salvar. A restauração parou."}falhas++}
         }else S.days.set(iso,d);
       }
+      for(let i=0;i<P.sensor.length;i++){
+        const iso=P.sensor[i];setBackupMsg(`Restaurando o sensor: dia ${i+1} de ${P.sensor.length}…`);
+        const doc=Object.assign({},S.sensor.get(iso)||{data:iso,fonte:"LibreView"},juntarSensor(S.sensor.get(iso),P.c.sensor[iso]),{atualizadoEm:Date.now()});
+        if(S.mode==="db"){const ref=S.db.doc("sensor/"+iso),chave="sensor/"+iso;
+          const job=(queues[chave]||Promise.resolve()).catch(()=>{}).then(()=>ref.set(doc));queues[chave]=job;
+          try{await job}catch(e){if(e&&e.code==="invalid_argument"){S.readOnly=true;throw "Sem permissão para salvar. A restauração parou."}falhas++;continue}}
+        S.sensor.set(iso,doc);
+      }
+      if(S.mode!=="db"&&P.sensor.length&&!saveSensorLocal())throw "Não há espaço neste navegador para restaurar o sensor.";
       if(S.mode!=="db"&&!saveLocal())throw "Não há espaço neste navegador para restaurar a cópia.";
       if(!S.nome&&P.c.nome){S.nome=P.c.nome;await saveNome(P.c.nome).catch(()=>{})}
       if(!S.plano&&P.c.plano){S.plano=P.c.plano;await savePlano(P.c.plano).catch(()=>{})}
-      const feitos=alvo.length-falhas;
-      setBackupMsg(`Cópia restaurada: ${feitos} ${feitos===1?"dia":"dias"}.`+(falhas?` ${falhas} não ${falhas===1?"pôde":"puderam"} ser salvos; tente restaurar de novo.`:"")
+      const feitos=alvo.length+P.sensor.length-falhas;
+      setBackupMsg(`Cópia restaurada: ${feitos} ${feitos===1?"dia":"dias"}${P.sensor.length?` (${P.sensor.length} de sensor)`:""}.`+(falhas?` ${falhas} não ${falhas===1?"pôde":"puderam"} ser salvos; tente restaurar de novo.`:"")
         +(semFoto?` ${semFoto} ${semFoto===1?"foto não voltou":"fotos não voltaram"} ${S.mode==="db"?"(não estavam na cópia)":"(o modo local não guarda fotos)"}.`:""));
     }catch(err){setBackupMsg(typeof err==="string"?err:"A restauração parou por um erro. Os dias já restaurados foram mantidos; tente de novo.")}
     finally{B.busy=false;render()}
