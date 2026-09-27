@@ -710,9 +710,12 @@ input.in{height:48px}
   function summaryText(){
     const R=computeSummary();
     const per=R.first?`${fmtDM.format(parseIso(R.first))} a ${fmtDM.format(parseIso(R.last))}`:"sem registros";
-    let t=`Resumo da glicemia (${per})\nDias com registro: ${R.isos.length}\nMédia geral: antes ${fmt(avg(R.allA))} mg/dL · 2h depois ${fmt(avg(R.allD))} mg/dL\n\n`;
+    let t=`Resumo da glicemia (${per})\nDias com registro: ${R.isos.length}\nMédia geral: antes ${fmt(avg(R.allA))} mg/dL · 2h depois ${fmt(avg(R.allD))} mg/dL\n`;
+    if(R.cv!=null)t+=`Variabilidade: coeficiente de variação ${fmt(R.cv)}% · desvio padrão ${fmt(R.dp)} mg/dL\n`;
+    t+=`\n`;
     R.rows.forEach(r=>{if(!r.na&&!r.nd)return;
-      t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un\n`;});
+      t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un\n`;
+      [[r.da,"antes"],[r.dd,"2h"]].forEach(([d,l])=>{if(d&&d.n>=MIN_CAIXA)t+=`  ${l}: mediana ${fmt(d.med)}, metade central ${fmt(d.p25)}–${fmt(d.p75)}, de ${fmt(d.min)} a ${fmt(d.max)}\n`});});
     if(R.tags.length){t+=`\nRefeições com etiqueta:\n`;R.tags.forEach(r=>{t+=`- ${r.t}: ${r.n} refeições · antes ${fmt(r.a)} · 2h ${fmt(r.d)}\n`})}
     if(R.extras.length){t+=`\nOutras medições: ${R.extras.length}\n`;R.extras.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${extraValor(x)}${x.lo||x.hi||!has(x.valor)?"":" mg/dL"}${x.momento?" · "+x.momento:""}${has(x.obs)?" · "+x.obs:""}\n`})}
     t+=`\nHipoglicemias registradas: ${R.hipos.length}\n`;
@@ -966,6 +969,15 @@ input.in{height:48px}
         styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,lineColor:C.line,textColor:C.ink,valign:"top"},
         headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold"}},opts));
       y=doc.lastAutoTable.finalY+10};
+    if(R.rows.some(r=>r.da||r.dd)){
+      const med=d=>d?n0(d.med):"-", fx=d=>d&&d.n>=MIN_CAIXA?n0(d.p25)+"-"+n0(d.p75):"-", mm=d=>d?n0(d.min)+"-"+n0(d.max):"-";
+      section("Perfil por refeição (espalhamento das medições)",{head:[["Refeição","Antes\nmediana","Antes\n25-75%","Antes\nmín-máx","2h depois\nmediana","2h depois\n25-75%","2h depois\nmín-máx"]],
+        body:R.rows.map(r=>[r.x.n,med(r.da),fx(r.da),mm(r.da),med(r.dd),fx(r.dd),mm(r.dd)]),
+        styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,lineColor:C.line,textColor:C.ink,halign:"center"},columnStyles:{0:{halign:"left",fontStyle:"bold"}}});
+      doc.setFont("helvetica","italic");doc.setFontSize(7);doc.setTextColor(...C.muted);
+      doc.text(`Coeficiente de variação ${R.cv==null?"-":n0(R.cv)+"%"} · desvio padrão ${R.dp==null?"-":n0(R.dp)+" mg/dL"} (${R.nTodas} medições antes e 2h). 25-75% só com ${MIN_CAIXA} medições ou mais.`,M,y-6);
+      y+=2;
+    }
     if(R.tags.length)section("Refeições com etiqueta",{head:[["Etiqueta","Refeições","Antes média","2h depois média"]],
       body:R.tags.map(r=>[r.t,String(r.n),n0(r.a),n0(r.d)]),columnStyles:{1:{halign:"center"},2:{halign:"center"},3:{halign:"center"}}});
     if(R.extras.length)section("Outras medições (fora das refeições; não entram nas médias)",{head:[["Data","Hora","Glicemia","Momento","Observações"]],
