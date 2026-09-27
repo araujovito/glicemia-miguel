@@ -62,3 +62,44 @@ test("demonstração navega, pagina e permanece somente leitura",async()=>{
   assert.equal(errors.length,0,errors.join("\n"));
   await context.close();
 });
+
+test("registro local continua disponível depois de recarregar",async()=>{
+  const context=await browser.newContext({serviceWorkers:"block",locale:"pt-BR"});
+  const page=await context.newPage();
+  await page.goto(baseUrl+"/site/index.html",{waitUntil:"domcontentloaded"});
+  await page.locator('button[data-meal="cafe"]').click();
+  await page.locator("#f-antes").fill("123");
+  await page.locator("#f-comeu").fill("Banana e leite");
+  await page.locator("#form").evaluate(form=>form.requestSubmit());
+  await page.locator("#form").waitFor({state:"detached"});
+
+  await page.reload({waitUntil:"domcontentloaded"});
+  const breakfast=page.locator('button[data-meal="cafe"]');
+  await assert.doesNotReject(()=>breakfast.waitFor());
+  assert.match(await breakfast.innerText(),/123/);
+  assert.match(await breakfast.innerText(),/Banana e leite/);
+  await context.close();
+});
+
+test("falha de armazenamento mantém o formulário preenchido",async()=>{
+  const context=await browser.newContext({serviceWorkers:"block",locale:"pt-BR"});
+  await context.addInitScript(()=>{
+    const original=Storage.prototype.setItem;
+    Storage.prototype.setItem=function(key,value){
+      if(key==="diario-glicemia-v1")throw new DOMException("armazenamento indisponível","QuotaExceededError");
+      return original.call(this,key,value);
+    };
+  });
+  const page=await context.newPage();
+  await page.goto(baseUrl+"/site/index.html",{waitUntil:"domcontentloaded"});
+  await page.locator('button[data-meal="cafe"]').click();
+  await page.locator("#f-antes").fill("117");
+  await page.locator("#f-comeu").fill("Pão e queijo");
+  await page.locator("#form").evaluate(form=>form.requestSubmit());
+
+  await page.locator("#form").waitFor({state:"visible"});
+  assert.equal(await page.locator("#f-antes").inputValue(),"117");
+  assert.equal(await page.locator("#f-comeu").inputValue(),"Pão e queijo");
+  assert.match(await page.locator("#toast").innerText(),/Não foi possível salvar/);
+  await context.close();
+});
