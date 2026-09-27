@@ -1,0 +1,36 @@
+# Este repositório guarda só código e modelos vazios.
+# Nada com dado de saúde pode entrar aqui: exportações, fotos, planilhas preenchidas.
+
+# Exportações do site (relatório e planilha)
+*.csv
+*.pdf
+*.txt
+
+# Fotos e capturas de tela
+*.jpg
+*.jpeg
+*.png
+*.heic
+*.heif
+*.webp
+*.gif
+
+# Planilhas: só os dois modelos vazios são versionados.
+# Uma cópia preenchida deve ficar fora da pasta do projeto.
+*.xlsx
+*.xls
+*.ods
+!planilha/modelo_folha_A4.xlsx
+!planilha/Controle de Glicemia - Registros.xlsx
+~$*
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Sistema e editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
