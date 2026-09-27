@@ -150,3 +150,20 @@ test("restaurar cópia com refeição apagada funciona, e a segunda vez não há
   assert.match(await dono.locator(".confirm").innerText(),/Nada a restaurar/);
   fs.unlinkSync(arquivo);
 });
+
+test("cópia antiga com fotos é restaurada sem as referências às fotos",async()=>{
+  const copia={formato:"diario-glicemia-backup",versao:1,exportadoEm:"2026-09-25T12:00:00Z",nome:"",plano:"",
+    fotos:{"foto-velha":"data:image/jpeg;base64,AAAA"},
+    dias:{"2026-09-21":{data:"2026-09-21",atualizadoEm:9,refeicoes:{jantar:{antes:130,fotos:["foto-velha"],criadoEm:9,atualizadoEm:9}}}}};
+  const arquivo=path.join(require("node:os").tmpdir(),"copia-antiga-glicemia.json");
+  fs.writeFileSync(arquivo,JSON.stringify(copia));
+  const dono=await abrir({uid:"u_ana",dono:true});
+  await dono.locator('button[data-tab="resumo"]').click();
+  await dono.locator("#bk-file").setInputFiles(arquivo);
+  await dono.locator("#bk-restore").click();
+  await dono.getByText(/Cópia restaurada/).waitFor();
+  const jantar=store.get("dias/2026-09-21").refeicoes.jantar;
+  assert.equal(jantar.antes,130);
+  assert.equal("fotos" in jantar,false);
+  fs.unlinkSync(arquivo);
+});

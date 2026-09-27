@@ -333,7 +333,7 @@ input.in{height:48px}
   const DEMO=new URLSearchParams(location.search).get("demo")==="1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
               period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
-              backup:{fotos:true,busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
+              backup:{busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -890,7 +890,7 @@ input.in{height:48px}
   }
 
   /* ---------- cópia de segurança ---------- */
-  // Um arquivo .json com tudo o que o site guarda: dias, nome, plano da equipe médica e, se marcado, as fotos (em base64).
+  // Um arquivo .json com tudo o que o site guarda: dias, leituras do sensor, nome e plano da equipe médica.
   // Serve para não depender de uma única conta: o arquivo fica com a família.
   const BACKUP_FORMATO="diario-glicemia-backup";
   /* ---------- sensor (FreeStyle Libre, CSV do LibreView) ---------- */
@@ -1071,7 +1071,6 @@ input.in{height:48px}
     const B=S.backup, n=daysWithData().length+[...S.sensor.keys()].filter(k=>!dayHas(k)).length, ro=S.readOnly||S.mode==="offline"||S.mode==="loading";
     return `<section class="card" style="margin-top:12px"><strong>Cópia de segurança</strong>
       <p class="note" style="margin-top:6px">Baixa um arquivo com todos os registros${n?` (${n} ${n===1?"dia":"dias"})`:""}, o nome e o plano da equipe médica. Guarde fora do celular, por exemplo no e-mail ou no Google Drive.</p>
-      <label class="check" style="margin-top:8px"><input type="checkbox" id="bk-fotos" ${B.fotos?"checked":""}> Incluir as fotos dos pratos <span class="hint">(arquivo maior)</span></label>
       <div class="actions"><button class="btn" id="bk-export"${B.busy||!n?" disabled":""}>Baixar cópia de segurança</button>
       ${ro||B.busy||B.plano?"":`<label class="btn filebtn">Restaurar de uma cópia<input type="file" id="bk-file" accept=".json,application/json"></label>`}</div>
       ${B.plano?planoHtml(B.plano):""}
@@ -1080,37 +1079,27 @@ input.in{height:48px}
         ${S.mode==="db"
           ?`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`
           :`<p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>`}
-        ${S.mode==="db"&&!S.isOwner?`<p class="note">Só quem criou o diário pode apagar todos os dados.</p>`:S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, fotos, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
+        ${S.mode==="db"&&!S.isOwner?`<p class="note">Só quem criou o diário pode apagar todos os dados.</p>`:S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
         `<button type="button" class="btn danger" id="erase-start" ${ro?"disabled":""}>Apagar todos os dados deste diário</button>`}
       </details></section>`;
   }
   function setBackupMsg(msg){S.backup.msg=msg;const el=$("bk-msg");if(el){el.textContent=msg||"";el.hidden=!msg}}
-  function blobToDataUrl(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)})}
-  function fotosDoDia(d){const ids=[];Object.values(d&&d.refeicoes||{}).forEach(m=>(m&&m.fotos||[]).forEach(id=>ids.push(id)));return ids}
   async function exportBackup(){
     const B=S.backup;if(B.busy)return;
     const dl=await getDownloads();if(!dl)return;
     B.busy=true;renderView();
     try{
       const dias={};daysWithData().forEach(iso=>{dias[iso]=S.days.get(iso)});
-      const fotos={};let faltaram=0;
-      if(B.fotos){
-        const ids=[...new Set(Object.values(dias).flatMap(fotosDoDia))];
-        for(let i=0;i<ids.length;i++){
-          setBackupMsg(`Copiando as fotos: ${i+1} de ${ids.length}…`);
-          try{const r=await fetch(fotoUrl(ids[i]));if(!r.ok)throw 0;fotos[ids[i]]=await blobToDataUrl(await r.blob())}catch(e){faltaram++}
-        }
-      }
       const sensor={};S.sensor.forEach((d,iso)=>{if((d.min||[]).length)sensor[iso]=d});
-      const copia={formato:BACKUP_FORMATO,versao:1,exportadoEm:new Date().toISOString(),nome:S.nome||"",plano:S.plano||"",dias,fotos,sensor};
+      const copia={formato:BACKUP_FORMATO,versao:1,exportadoEm:new Date().toISOString(),nome:S.nome||"",plano:S.plano||"",dias,sensor};
       setBackupMsg("Preparando o arquivo…");
       await dl.save({filename:`copia-glicemia-${todayIso()}.json`,data:new Blob([JSON.stringify(copia)],{type:"application/json"})});
-      const nd=Object.keys(dias).length, nf=Object.keys(fotos).length, ns=Object.keys(sensor).length;
-      setBackupMsg(`Cópia baixada: ${nd} ${nd===1?"dia":"dias"}${B.fotos?`, ${nf} ${nf===1?"foto":"fotos"}`:", sem fotos"}${ns?`, ${ns} ${ns===1?"dia":"dias"} de sensor`:""}.${faltaram?` ${faltaram} ${faltaram===1?"foto não pôde ser copiada":"fotos não puderam ser copiadas"}.`:""}`);
+      const nd=Object.keys(dias).length, ns=Object.keys(sensor).length;
+      setBackupMsg(`Cópia baixada: ${nd} ${nd===1?"dia":"dias"}${ns?`, ${ns} ${ns===1?"dia":"dias"} de sensor`:""}.`);
     }catch(err){
       const c=err&&err.code;
       if(c==="declined")setBackupMsg(null);
-      else if(c==="too_large")setBackupMsg("O arquivo ficou grande demais para esta tela. Tente de novo sem as fotos.");
+      else if(c==="too_large")setBackupMsg("O arquivo ficou grande demais para esta tela.");
       else if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;setBackupMsg(null)}
       else setBackupMsg("Não foi possível baixar a cópia agora. Tente de novo.");
     }finally{B.busy=false;renderView()}
@@ -1122,13 +1111,13 @@ input.in{height:48px}
     let c;try{c=JSON.parse(texto)}catch(e){throw COPIA_INVALIDA}
     if(!c||c.formato!==BACKUP_FORMATO||!c.dias||typeof c.dias!=="object")throw COPIA_INVALIDA;
     if(c.versao!==1)throw "Esta cópia foi feita por uma versão mais nova do site. Atualize a página e tente de novo.";
-    const dias={},fotos={};
-    // O arquivo vem de fora: só entram chaves de data válidas, dias em forma de objeto e fotos em data URL de imagem.
+    const dias={};
+    // O arquivo vem de fora: só entram chaves de data válidas e dias em forma de objeto.
+    // Cópias antigas podem trazer "fotos" (o site já guardou fotos dos pratos); elas são ignoradas.
     for(const [iso,d] of Object.entries(c.dias)){
       if(!validIsoDate(iso)||!validBackupDay(d))throw COPIA_INVALIDA;
       dias[iso]=d;
     }
-    Object.entries(c.fotos||{}).forEach(([id,u])=>{if(typeof u==="string"&&/^data:image\/(jpeg|png|webp);base64,/.test(u))fotos[id]=u});
     const sensor={};
     for(const [iso,d] of Object.entries(c.sensor&&typeof c.sensor==="object"?c.sensor:{})){
       if(!validIsoDate(iso)||!d||!Array.isArray(d.min)||!Array.isArray(d.mg)||d.min.length!==d.mg.length)throw COPIA_INVALIDA;
@@ -1137,7 +1126,7 @@ input.in{height:48px}
       const m=new Map();d.min.forEach((min,i)=>{const tipo=d.tipo?d.tipo[i]:0;m.set(min*10+tipo,{min,mg:d.mg[i],tipo})});
       sensor[iso]=m;
     }
-    return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,fotos,sensor};
+    return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,sensor};
   }
   function planejarRestauracao(c){
     const novos=[],trocar=[],manter=[];
@@ -1164,28 +1153,16 @@ input.in{height:48px}
       <div>${nada?`<button type="button" class="btn" id="bk-cancel" style="grid-column:1 / -1">Fechar</button>`
         :`<button type="button" class="btn" id="bk-cancel">Cancelar</button><button type="button" class="btn primary" id="bk-restore">Restaurar</button>`}</div></div>`;
   }
-  function dataUrlToBlob(u){const [cab,b64]=u.split(",");const bin=atob(b64),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:cab.slice(5,cab.indexOf(";"))})}
-  async function fotoExiste(id){try{const r=await fetch(fotoUrl(id));return r.ok}catch(e){return false}}
   async function restaurar(){
     const B=S.backup, P=B.plano;if(!P||B.busy)return;
     B.busy=true;B.plano=null;renderView();
-    const alvo=[...P.novos,...P.trocar], troca={};let semFoto=0, falhas=0;
+    const alvo=[...P.novos,...P.trocar];let falhas=0;
     try{
-      // Fotos: se o id ainda existe neste Artifact, reaproveita; senão, envia de novo a partir da cópia (id novo).
-      const ids=[...new Set(alvo.flatMap(iso=>fotosDoDia(P.c.dias[iso])))];
-      for(let i=0;i<ids.length;i++){
-        setBackupMsg(`Restaurando as fotos: ${i+1} de ${ids.length}…`);
-        const id=ids[i];
-        if(S.mode==="db"&&await fotoExiste(id)){troca[id]=id;continue}
-        if(S.assets&&P.c.fotos[id]){
-          try{const r=await S.assets.upload(dataUrlToBlob(P.c.fotos[id]),{type:"image/jpeg"});troca[id]=r.id;S.fotoUrls[r.id]=r.url;continue}catch(e){}
-        }
-        semFoto++;
-      }
       for(let i=0;i<alvo.length;i++){
         const iso=alvo[i];setBackupMsg(`Restaurando os dias: ${i+1} de ${alvo.length}…`);
         const vindo=JSON.parse(JSON.stringify(P.c.dias[iso]));vindo.data=iso;
-        Object.values(vindo.refeicoes||{}).forEach(m=>{if(m&&Array.isArray(m.fotos)){m.fotos=m.fotos.map(id=>troca[id]).filter(Boolean);if(!m.fotos.length)delete m.fotos}});
+        // Refeições de cópias antigas podem apontar para fotos que o site não guarda mais.
+        Object.values(vindo.refeicoes||{}).forEach(m=>{if(m)delete m.fotos});
         const d=mergeDayRecords(S.days.get(iso),vindo);
         if(S.mode==="db"){
           const ref=S.db.doc("dias/"+iso);
@@ -1207,8 +1184,7 @@ input.in{height:48px}
       if(!S.nome&&P.c.nome){S.nome=P.c.nome;await saveNome(P.c.nome).catch(()=>{})}
       if(!S.plano&&P.c.plano){S.plano=P.c.plano;await savePlano(P.c.plano).catch(()=>{})}
       const feitos=alvo.length+P.sensor.length-falhas;
-      setBackupMsg(`Cópia restaurada: ${feitos} ${feitos===1?"dia":"dias"}${P.sensor.length?` (${P.sensor.length} de sensor)`:""}.`+(falhas?` ${falhas} não ${falhas===1?"pôde":"puderam"} ser salvos; tente restaurar de novo.`:"")
-        +(semFoto?` ${semFoto} ${semFoto===1?"foto não voltou":"fotos não voltaram"} ${S.mode==="db"?"(não estavam na cópia)":"(o modo local não guarda fotos)"}.`:""));
+      setBackupMsg(`Cópia restaurada: ${feitos} ${feitos===1?"dia":"dias"}${P.sensor.length?` (${P.sensor.length} de sensor)`:""}.`+(falhas?` ${falhas} não ${falhas===1?"pôde":"puderam"} ser salvos; tente restaurar de novo.`:""));
     }catch(err){setBackupMsg(typeof err==="string"?err:"A restauração parou por um erro. Os dias já restaurados foram mantidos; tente de novo.")}
     finally{B.busy=false;render()}
   }
@@ -1218,10 +1194,7 @@ input.in{height:48px}
     if(S.erasing||(S.mode==="db"&&!S.isOwner))return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
     try{
       await Promise.allSettled(Object.values(queues));
-      const fotoIds=[...new Set([...S.days.values()].flatMap(fotosDoDia))];
       if(S.mode==="db"){
-        if(fotoIds.length&&!S.assets)throw {code:"assets_unavailable"};
-        for(const id of fotoIds)await S.assets.delete(id);
         for(const iso of S.days.keys())await S.db.doc("dias/"+iso).delete();
         for(const iso of S.sensor.keys())await S.db.doc("sensor/"+iso).delete();
         await S.db.doc("config/crianca").delete();
@@ -1232,7 +1205,7 @@ input.in{height:48px}
       setSync("saved","Todos os dados foram apagados");render();toast("Dados apagados");
     }catch(e){
       S.erasing=false;setSync("error","Não foi possível apagar tudo");renderView();
-      toast(e&&e.code==="assets_unavailable"?"As fotos não puderam ser acessadas. Nada foi confirmado como apagado.":"A exclusão não terminou. Tente novamente.");
+      toast("A exclusão não terminou. Tente novamente.");
     }
   }
 
@@ -1871,7 +1844,6 @@ input.in{height:48px}
   });
   document.addEventListener("change",async e=>{
     const id=e.target.id;
-    if(id==="bk-fotos"){S.backup.fotos=e.target.checked;return}
     if(id==="lv-file"){const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
       try{const r=lerLibreView(await f.text());r.novos=r.isos.filter(iso=>!S.sensor.has(iso)).length;S.imp.plano=r;S.imp.msg=null}
       catch(err){S.imp.plano=null;S.imp.msg=typeof err==="string"?err:NAO_LIBRE}
