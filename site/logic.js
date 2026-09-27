@@ -63,6 +63,12 @@
     return out;
   }
 
+  // Mesmos registros (ignorando os apagados, que ficam null) nos dois mapas.
+  function sameRecords(a,b){
+    const x=recordMap(a),y=recordMap(b),kx=Object.keys(x).filter(k=>x[k]),ky=Object.keys(y).filter(k=>y[k]);
+    return kx.length===ky.length&&kx.every(k=>JSON.stringify(x[k])===JSON.stringify(y[k]));
+  }
+
   function mergeDayRecords(current,incoming){
     if(!current)return incoming;
     if(!incoming)return current;
@@ -73,6 +79,9 @@
     out.hipos=mergeRecordMaps(current.hipos,incoming.hipos);
     out.extras=mergeRecordMaps(current.extras,incoming.extras);
     out.atualizadoEm=Math.max(+current.atualizadoEm||0,+incoming.atualizadoEm||0);
+    // Se a cópia não acrescentou nem mudou nenhum registro, devolve o dia como estava. Assim o plano de
+    // restauração consegue dizer "nada a restaurar" e nenhum documento é regravado à toa.
+    if(["refeicoes","hipos","extras"].every(k=>sameRecords(out[k],current[k])))return current;
     return out;
   }
 

@@ -109,3 +109,12 @@ test("restaurar cópia com refeição apagada (null) não falha nem apaga a atua
   assert.equal(m.refeicoes.almoco.antes,120);
   assert.equal(m.hipos.h1,undefined);
 });
+
+test("restaurar a mesma cópia de novo não muda o dia",()=>{
+  const dia={data:"2026-09-21",refeicoes:{cafe:{antes:100}}};
+  assert.equal(L.mergeDayRecords(dia,JSON.parse(JSON.stringify(dia))),dia);
+  const comApagado={data:"2026-09-21",atualizadoEm:3,refeicoes:{cafe:{antes:100,atualizadoEm:3},lanche:null}};
+  assert.equal(L.mergeDayRecords(comApagado,JSON.parse(JSON.stringify(comApagado))),comApagado);
+  const novo={data:"2026-09-21",refeicoes:{cafe:{antes:100},janta:{antes:130,atualizadoEm:4}}};
+  assert.notEqual(L.mergeDayRecords(dia,novo),dia);
+});
