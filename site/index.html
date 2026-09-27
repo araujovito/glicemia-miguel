@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -1681,10 +1681,11 @@ input.in{height:48px}
   async function writeDay(iso,change){
     const had=S.days.get(iso), campo=CAMPO[change.tipo], agora=Date.now();
     const mapa=asMap(had&&had[campo]);
+    const previous=mapa[change.chave];
     if(change.valor)mapa[change.chave]=change.valor;else delete mapa[change.chave];
     const next=Object.assign({},had||{},{[campo]:mapa,data:iso,atualizadoEm:agora});
     // Se o campo ainda está no formato de lista, o update substituiria a lista inteira: grava o mapa completo uma vez.
-    const parte=Array.isArray(had&&had[campo])?mapa:{[change.chave]:change.valor||null};
+    const parte=Array.isArray(had&&had[campo])?mapa:{[change.chave]:withClearedFields(previous,change.valor)||null};
     const delta={[campo]:parte,data:iso,atualizadoEm:agora};
     const vazio=!Object.values(next.refeicoes||{}).some(Boolean)&&!listOf(next.hipos).length&&!listOf(next.extras).length;
     const apply=()=>{if(vazio&&S.mode!=="db")S.days.delete(iso);else S.days.set(iso,next)};

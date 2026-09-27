@@ -72,6 +72,12 @@ test("restauração conserva a versão mais recente de cada registro",()=>{
   assert.equal(L.mergeDayRecords(atual,copia).refeicoes.almoco.comeu,"atual");
 });
 
+test("campos apagados são enviados como nulos na sincronização",()=>{
+  const previous={antes:100,carbo:45,obs:"comeu tudo",fotos:["foto-1"]};
+  const next={antes:105};
+  assert.deepEqual(L.withClearedFields(previous,next),{antes:105,carbo:null,obs:null,fotos:null});
+});
+
 test("leituras do sensor são unidas sem duplicar",()=>{
   const a={min:[60,75],mg:[100,110],tipo:[0,0]};
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);
