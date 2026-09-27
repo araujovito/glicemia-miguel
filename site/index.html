@@ -124,6 +124,9 @@ svg.chart{width:100%;height:auto;display:block}
 .chart .ba{fill:var(--accent)} .chart .bd{fill:var(--after)}
 .chart .hit{fill:transparent;cursor:pointer}
 .chart .hit:hover+.mark,.chart .mark.on{opacity:.75}
+.chart .wa{stroke:var(--accent)} .chart .wd{stroke:var(--after)}
+.chart .med{stroke:var(--surface);stroke-width:2}
+details.tabela{margin-top:8px} details.tabela summary{cursor:pointer;color:var(--accent);font-weight:700;padding:6px 0}
 .charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
@@ -301,6 +304,10 @@ input.in{height:48px}
   function fmt(n,dec=0){if(n==null||!isFinite(n))return "–";return n.toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:dec})}
   function parseNum(v){v=String(v).trim().replace(",",".");if(v==="")return null;const n=Number(v);return isFinite(n)?n:NaN}
   function avg(a){return a.length?a.reduce((s,x)=>s+x,0)/a.length:null}
+  // Percentil com interpolação linear (o mesmo método do Excel PERCENTIL.INC).
+  function percentil(v,p){if(!v.length)return null;const s=v.slice().sort((a,b)=>a-b),i=(s.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return s[lo]+(s[hi]-s[lo])*(i-lo)}
+  function desvio(v){if(v.length<2)return null;const m=avg(v);return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/(v.length-1))}
+  function distrib(v){return v.length?{n:v.length,min:Math.min(...v),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),max:Math.max(...v)}:null}
   function has(v){return v!==null&&v!==undefined&&v!==""}
   function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
   function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
@@ -576,7 +583,7 @@ input.in{height:48px}
       isos.forEach(iso=>{const m=mealOf(iso,x.k);if(!m)return;
         if(has(m.antes))a.push(+m.antes); if(has(m.depois))d.push(+m.depois); if(has(m.insulina))ins.push(+m.insulina);
         if(has(m.antes)&&has(m.depois))diff.push(m.depois-m.antes);});
-      return {x,na:a.length,nd:d.length,a:avg(a),d:avg(d),ins:avg(ins),diff:avg(diff),
+      return {x,na:a.length,nd:d.length,a:avg(a),d:avg(d),ins:avg(ins),diff:avg(diff),da:distrib(a),dd:distrib(d),
               amin:a.length?Math.min(...a):null,amax:a.length?Math.max(...a):null,dmin:d.length?Math.min(...d):null,dmax:d.length?Math.max(...d):null};
     });
     const allA=[],allD=[];
@@ -587,7 +594,9 @@ input.in{height:48px}
     const tags=ETIQUETAS.map(t=>{const a=[],d=[];let n=0;
       isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!m||!(m.tags||[]).includes(t))return;n++;if(has(m.antes))a.push(+m.antes);if(has(m.depois))d.push(+m.depois)}));
       return {t,n,a:avg(a),d:avg(d)}}).filter(r=>r.n>0);
-    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags};
+    const todas=[...allA,...allD], dp=desvio(todas), media=avg(todas);
+    const cv=dp!=null&&media?dp/media*100:null;
+    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length};
   }
 
   function chart(rows){
@@ -607,6 +616,46 @@ input.in{height:48px}
       s+=`<text class="lbl" x="${cx}" y="${H-10}" text-anchor="middle">${r.x.s}</text>`;
     });
     return s+`</svg>`;
+  }
+
+  /* Perfil por refeição: adaptação do AGP para medições de ponta de dedo.
+     Sem leitura contínua não há curva por hora; o que dá para mostrar é o espalhamento em cada momento medido. */
+  const MIN_CAIXA=4;   // abaixo disso, 25–75% não quer dizer muito: mostra só mínimo–máximo e mediana
+  function perfilChart(rows){
+    const W=340,H=220,L=34,R=6,T=12,B=28,pw=W-L-R,ph=H-T-B;
+    const vals=rows.flatMap(r=>[r.da,r.dd].filter(Boolean).flatMap(d=>[d.min,d.max]));
+    const lo=Math.max(0,Math.floor((Math.min(...vals)-10)/50)*50), hi=Math.max(lo+100,Math.ceil((Math.max(...vals)+10)/50)*50), step=hi-lo>250?100:50;
+    const y=v=>T+ph-(v-lo)/(hi-lo)*ph, gw=pw/rows.length;
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribuição da glicemia antes e 2 horas depois, por refeição: mínimo, máximo, metade central e mediana">`;
+    for(let v=lo;v<=hi;v+=step)s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+    rows.forEach((r,i)=>{
+      const cx=L+gw*i+gw/2;
+      [[r.da,"a",-8,"antes"],[r.dd,"d",8,"2h depois"]].forEach(([d,c,off,lab])=>{
+        if(!d)return;const x=cx+off;
+        const tip=`${r.x.n} · ${lab} (${d.n} ${d.n===1?"medição":"medições"})\nMediana ${fmt(d.med)} mg/dL`+(d.n>=MIN_CAIXA?`\nMetade central: ${fmt(d.p25)} a ${fmt(d.p75)}`:"")+`\nMenor e maior: ${fmt(d.min)} a ${fmt(d.max)}`;
+        s+=`<rect class="hit" x="${x-7}" y="${T}" width="14" height="${ph}" data-tip="${esc(tip)}"/>`;
+        s+=`<line class="w${c}" x1="${x}" x2="${x}" y1="${y(d.max)}" y2="${y(d.min)}" stroke-width="2" stroke-linecap="round" pointer-events="none"/>`;
+        if(d.n>=MIN_CAIXA)s+=`<rect class="b${c}" x="${x-4}" y="${y(d.p75)}" width="8" height="${Math.max(2,y(d.p25)-y(d.p75))}" rx="3" pointer-events="none"/>`;
+        s+=`<circle class="b${c} med" cx="${x}" cy="${y(d.med)}" r="4.5" pointer-events="none"/>`;
+      });
+      s+=`<text class="lbl" x="${cx}" y="${H-10}" text-anchor="middle">${r.x.s}</text>`;
+    });
+    return s+`</svg>`;
+  }
+  function perfilCard(R){
+    if(!R.rows.some(r=>r.da||r.dd))return "";
+    const faixa=d=>d?(d.n>=MIN_CAIXA?`${fmt(d.p25)}–${fmt(d.p75)}`:"–"):"–";
+    return `<section class="card" style="margin-top:12px"><strong>Perfil por refeição</strong>
+      <p class="note" style="margin-top:4px">Como os valores se espalham em cada refeição, além da média.</p>
+      <div class="stats" style="margin:10px 0 4px">
+        <div class="stat"><b>${R.cv==null?"–":fmt(R.cv)+"%"}</b><small>coeficiente de variação</small></div>
+        <div class="stat"><b>${R.dp==null?"–":fmt(R.dp)}</b><small>desvio padrão (mg/dL)</small></div></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Antes</span><span><i style="background:var(--after)"></i>2h depois</span></div>
+      ${perfilChart(R.rows)}
+      <p class="note" style="margin-top:4px">Traço: do menor ao maior valor. Barra: metade central das medições (de 25% a 75%), só com ${MIN_CAIXA} medições ou mais. Ponto: mediana. CV e desvio padrão usam todas as ${R.nTodas} medições antes e 2h do período.</p>
+      <details class="tabela"><summary>Ver em tabela</summary><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>mediana</th><th class="num">Antes<br>25–75%</th><th class="num">2h<br>mediana</th><th class="num">2h<br>25–75%</th></tr></thead><tbody>
+        ${R.rows.map(r=>`<tr><td>${r.x.n}</td><td class="num">${r.da?fmt(r.da.med):"–"}</td><td class="num">${faixa(r.da)}</td><td class="num">${r.dd?fmt(r.dd.med):"–"}</td><td class="num">${faixa(r.dd)}</td></tr>`).join("")}
+      </tbody></table></div></details></section>`;
   }
 
   function viewSummary(){
@@ -637,6 +686,7 @@ input.in{height:48px}
       h+=`<tr><td>${r.x.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${r.na?fmt(r.amin)+"–"+fmt(r.amax):"–"}</td><td class="num">${fmt(r.d)}</td><td class="num">${r.nd?fmt(r.dmin)+"–"+fmt(r.dmax):"–"}</td><td class="num">${r.diff==null?"–":(r.diff>0?"+":"")+fmt(r.diff)}</td><td class="num">${fmt(r.ins,1)}</td><td class="num">${r.na}/${r.nd}</td></tr>`;
     });
     h+=`</tbody></table></div><p class="note">Variação média = 2h depois − antes, só nas refeições com as duas medições. Medições = antes/2h.</p></section>`;
+    h+=perfilCard(R);
     if(R.tags.length){
       h+=`<section class="card" style="margin-top:12px"><strong>Refeições com etiqueta</strong><div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Etiqueta</th><th class="num">Refeições</th><th class="num">Antes<br>média</th><th class="num">2h<br>média</th></tr></thead><tbody>`+
         R.tags.map(r=>`<tr><td>${esc(r.t)}</td><td class="num">${r.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${fmt(r.d)}</td></tr>`).join("")+
