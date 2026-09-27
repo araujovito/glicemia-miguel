@@ -735,8 +735,7 @@ input.in{height:48px}
       <div class="stat"><b>${fmt(avg(R.allA))}</b><small>média antes</small></div>
       <div class="stat"><b>${fmt(avg(R.allD))}</b><small>média 2h depois</small></div>
       <div class="stat hypo"><b>${R.hipos.length}</b><small>${R.hipos.length===1?"hipoglicemia registrada":"hipoglicemias registradas"}</small></div></div>`;
-    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+agpCard(R)+sensorCard()+backupCard();
-    h+=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
+    const consulta=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
       <div class="field" style="margin-top:8px"><label for="rep-nome">Nome da criança</label>
       <input class="in" id="rep-nome" autocomplete="off" value="${esc(S.nome)}" placeholder="Nome da criança"></div>
       <p class="note" style="margin-top:6px">O nome aparece no topo do site e no PDF, em todos os aparelhos.</p>
@@ -745,8 +744,10 @@ input.in{height:48px}
       <button class="btn" id="csv">Baixar planilha (.csv)</button>
       <button class="btn" id="copy">Copiar resumo em texto</button></div>
       ${S.dlMsg?`<p class="banner" role="alert">${esc(S.dlMsg)}</p>`:""}
-      <p class="note" style="margin-top:10px">O PDF traz o período escolhido acima: médias por refeição, dois gráficos e o registro dia a dia.</p></section>`;
-    if(S.copyText!=null)h+=`<textarea class="copybox" id="copybox" readonly aria-label="Resumo em texto" style="margin:0 0 12px">${esc(S.copyText)}</textarea>`;
+      <p class="note" style="margin-top:10px">O PDF traz o período escolhido acima: ${R.isos.length?"médias por refeição, gráficos e o registro dia a dia":"o perfil do sensor"}${R.isos.length&&R.sensor?" e o perfil do sensor":""}.</p></section>`
+      +(S.copyText!=null?`<textarea class="copybox" id="copybox" readonly aria-label="Resumo em texto" style="margin:0 0 12px">${esc(S.copyText)}</textarea>`:"");
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+(R.sensor?consulta+agpCard(R):"")+sensorCard()+backupCard();
+    h+=consulta;
     h+=`<section class="card"><div class="legend"><span><i style="background:var(--accent)"></i>Antes</span><span><i style="background:var(--after)"></i>2h depois</span><span>mg/dL</span></div>${chart(R.rows)}</section>`;
     h+=`<section class="card" style="margin-top:12px"><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>média</th><th class="num">Antes<br>mín–máx</th><th class="num">2h<br>média</th><th class="num">2h<br>mín–máx</th><th class="num">Variação<br>média</th><th class="num">Insulina<br>média</th><th class="num">Carbo<br>média (g)</th><th class="num">Medições</th></tr></thead><tbody>`;
     R.rows.forEach(r=>{
@@ -1139,7 +1140,8 @@ input.in{height:48px}
     doc.setFontSize(9);doc.setTextColor(...C.ink);
     const right=[];
     if(S.nome)right.push("Paciente: "+S.nome);
-    right.push("Período: "+dmy(R.first)+" a "+dmy(R.last));
+    const p0=R.first||R.sensor.dias[0], p1=R.last||R.sensor.dias[R.sensor.dias.length-1];
+    right.push("Período: "+dmy(p0)+" a "+dmy(p1));
     right.push("Gerado em "+fmtDM.format(now)+" às "+hhmm(now.getTime()));
     right.forEach((t,i)=>doc.text(t,W-M,16+i*5,{align:"right"}));
     doc.setDrawColor(...C.accent);doc.setLineWidth(0.6);doc.line(M,31,W-M,31);
@@ -1151,6 +1153,16 @@ input.in{height:48px}
       doc.setFont("helvetica","bold");doc.setFontSize(14);doc.setTextColor(...C.ink);doc.text(v,x+4,45);
       doc.setFont("helvetica","normal");doc.setFontSize(7.5);doc.setTextColor(...C.muted);doc.text(l,x+4,50.5)});
 
+    const gw=(CW-8)/2, gh=58;
+    const legend=(x,yy)=>{doc.setFontSize(7);doc.setFont("helvetica","normal");
+      doc.setFillColor(...C.accent);doc.rect(x,yy-2.2,2.5,2.5,"F");doc.setTextColor(...C.muted);doc.text("Antes",x+3.5,yy);
+      doc.setFillColor(...C.after);doc.rect(x+15,yy-2.2,2.5,2.5,"F");doc.text("2h depois",x+18.5,yy)};
+    const axis=(x,yy,w,h,lo,hi)=>{const step=(hi-lo)>250?100:50;doc.setLineWidth(0.2);doc.setDrawColor(...C.line);doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.setFont("helvetica","normal");
+      for(let v=lo;v<=hi;v+=step){const py=yy+h-(v-lo)/(hi-lo)*h;doc.line(x,py,x+w,py);doc.text(String(v),x-1.5,py+1,{align:"right"})}};
+    let y=63;
+
+    // Sem refeições no período (família que só usa o sensor), as seções de refeição são puladas.
+    if(R.isos.length){
     // tabela por refeição
     doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Médias por refeição",M,63);
     table(doc,{startY:66,margin:{left:M,right:M},theme:"grid",
@@ -1160,18 +1172,12 @@ input.in{height:48px}
       styles:{font:"helvetica",fontSize:8.5,cellPadding:1.8,lineColor:C.line,textColor:C.ink,halign:"center"},
       headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold",fontSize:7.5},
       columnStyles:{0:{halign:"left",fontStyle:"bold"}}});
-    let y=doc.lastAutoTable.finalY+4;
+    y=doc.lastAutoTable.finalY+4;
     doc.setFont("helvetica","italic");doc.setFontSize(7);doc.setTextColor(...C.muted);
     doc.text("Glicemias em mg/dL. Variação média = 2h depois - antes, só nas refeições com as duas medições.",M,y+1);
 
     // gráficos
     y+=9;
-    const gw=(CW-8)/2, gh=58;
-    const legend=(x,yy)=>{doc.setFontSize(7);doc.setFont("helvetica","normal");
-      doc.setFillColor(...C.accent);doc.rect(x,yy-2.2,2.5,2.5,"F");doc.setTextColor(...C.muted);doc.text("Antes",x+3.5,yy);
-      doc.setFillColor(...C.after);doc.rect(x+15,yy-2.2,2.5,2.5,"F");doc.text("2h depois",x+18.5,yy)};
-    const axis=(x,yy,w,h,lo,hi)=>{const step=(hi-lo)>250?100:50;doc.setLineWidth(0.2);doc.setDrawColor(...C.line);doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.setFont("helvetica","normal");
-      for(let v=lo;v<=hi;v+=step){const py=yy+h-(v-lo)/(hi-lo)*h;doc.line(x,py,x+w,py);doc.text(String(v),x-1.5,py+1,{align:"right"})}};
 
     // barras por refeição
     let x0=M+7,top=y+8,pw=gw-9,ph=gh-18;
@@ -1204,6 +1210,7 @@ input.in{height:48px}
     for(let t=0;t<nt;t++){const i=nt>1?Math.round(t*(days.length-1)/(nt-1)):0;const [,mm,dd]=days[i].split("-");doc.text(dd+"/"+mm,px(i),top+ph+4,{align:"center"})}
 
     y=top+ph+14;
+    }
 
     // AGP do sensor
     const Sn=R.sensor, horasOk=Sn?Sn.horas.map((h,i)=>h&&h.n>=MIN_HORA?Object.assign({i},h):null).filter(Boolean):[];
@@ -1274,6 +1281,7 @@ input.in{height:48px}
     if(y>262){doc.addPage();y=20}
 
     // registro dia a dia
+    if(R.isos.length){
     doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Registro dia a dia",M,y);
     const body=[],dayIdx=[];
     R.isos.slice().reverse().forEach((iso,di)=>{let first=true;
@@ -1287,6 +1295,7 @@ input.in{height:48px}
       columnStyles:{0:{cellWidth:20,fontStyle:"bold"},1:{cellWidth:24},2:{cellWidth:12,halign:"center"},3:{cellWidth:11,halign:"center"},4:{cellWidth:13,halign:"center"},5:{cellWidth:13,halign:"center"},7:{cellWidth:34,textColor:C.muted}},
       didParseCell:d=>{if(d.section==="body"&&dayIdx[d.row.index]%2===1)d.cell.styles.fillColor=C.soft2},
       willDrawCell:d=>{if(d.section==="body"&&d.row.cells[0].raw&&d.row.index>0){doc.setDrawColor(...C.line);doc.setLineWidth(0.3);doc.line(d.cell.x,d.cell.y,d.cell.x+d.cell.width,d.cell.y)}}});
+    }
 
     // rodapé
     const pages=doc.getNumberOfPages();
