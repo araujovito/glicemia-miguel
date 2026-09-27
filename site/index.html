@@ -303,6 +303,12 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
+  // logic.js é um arquivo separado. Se ele não foi publicado junto (Artifact publicado só com o index.html),
+  // a tela ficaria em branco; em vez disso, explica o que falta.
+  if(!window.GlicemiaLogic){
+    document.getElementById("view").innerHTML='<div class="banner" role="alert">O site não carregou por completo: falta o arquivo <b>logic.js</b>, que precisa ser publicado junto com o index.html. Os registros não foram afetados.</div>';
+    return;
+  }
   const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,validIsoDate,validBackupDay,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
