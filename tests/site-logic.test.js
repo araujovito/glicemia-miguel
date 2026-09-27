@@ -81,6 +81,12 @@ test("campos apagados são enviados como nulos na sincronização",()=>{
   assert.deepEqual(L.withClearedFields(previous,next),{antes:105,carbo:null,obs:null,fotos:null});
 });
 
+test("cobertura do sensor inclui dias inteiros sem leituras",()=>{
+  assert.equal(Math.round(L.sensorCoverage(96,14)*10)/10,7.1);
+  assert.equal(L.sensorCoverage(14*96,14),100);
+  assert.equal(L.sensorCoverage(15*96,14),100);
+});
+
 test("leituras do sensor são unidas sem duplicar",()=>{
   const a={min:[60,75],mg:[100,110],tipo:[0,0]};
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);

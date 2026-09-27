@@ -81,6 +81,11 @@
     return out;
   }
 
+  function sensorCoverage(readings,days,expectedPerDay=96){
+    if(!days||days<1||!expectedPerDay)return 0;
+    return Math.min(100,Math.max(0,readings/(days*expectedPerDay)*100));
+  }
+
   function mergeSensor(atual,novos){
     const m=new Map();
     if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+((atual.tipo||[])[i]||0),{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
@@ -90,5 +95,5 @@
     return {min:a.map(x=>x.min),mg:a.map(x=>x.mg),tipo:a.map(x=>x.tipo)};
   }
 
-  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,mergeSensor};
+  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,mergeSensor};
 });

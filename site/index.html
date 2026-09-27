@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -722,8 +722,9 @@ input.in{height:48px}
     const porHora=Array.from({length:24},()=>[]), sTodas=[];
     sDias.forEach(iso=>pontosSensor(iso).forEach(p=>{if(p.tipo!==0)return;porHora[Math.floor(p.min/60)].push(p.mg);sTodas.push(p.mg)}));
     const sDp=desvio(sTodas), sMedia=avg(sTodas);
+    const coverageDays=S.period||(sDias.length?Math.round((parseIso(end)-parseIso(sDias[0]))/864e5)+1:0);
     const sensor=sDias.length?{dias:sDias,n:sTodas.length,media:sMedia,dp:sDp,cv:sDp!=null&&sMedia?sDp/sMedia*100:null,
-      cobertura:sTodas.length/(sDias.length*96)*100,
+      cobertura:sensorCoverage(sTodas.length,coverageDays),
       horas:porHora.map(v=>v.length?{n:v.length,p5:percentil(v,.05),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),p95:percentil(v,.95)}:null)}:null;
     return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length,locais,sensor,nLocais:locais.reduce((s,x)=>s+x.n,0)};
   }
