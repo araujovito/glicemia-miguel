@@ -1070,7 +1070,7 @@ input.in{height:48px}
       ${ro||B.busy||B.plano?"":`<label class="btn filebtn">Restaurar de uma cópia<input type="file" id="bk-file" accept=".json,application/json"></label>`}</div>
       ${B.plano?planoHtml(B.plano):""}
       <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p>
-      <details style="margin-top:18px"><summary>Privacidade e exclusão dos dados</summary>
+      <details style="margin-top:18px" ${S.eraseConfirm||S.erasing?"open":""}><summary>Privacidade e exclusão dos dados</summary>
         ${S.mode==="db"
           ?`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`
           :`<p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>`}
