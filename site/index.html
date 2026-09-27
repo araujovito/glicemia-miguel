@@ -327,7 +327,7 @@ input.in{height:48px}
   const DEMO=new URLSearchParams(location.search).get("demo")==="1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
               period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
-              backup:{fotos:true,busy:false,msg:null}, pending:0, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
+              backup:{fotos:true,busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -545,6 +545,7 @@ input.in{height:48px}
     window.claude.use("user").then(u=>{
       if(!u)return;S.user=u;
       u.id().then(id=>{S.uid=id});
+      u.isOwner().then(v=>{S.isOwner=v;if(S.tab==="resumo"&&!S.editing)renderView()});
       fillNames();
       // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
       u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
@@ -1070,8 +1071,10 @@ input.in{height:48px}
       ${B.plano?planoHtml(B.plano):""}
       <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p>
       <details style="margin-top:18px"><summary>Privacidade e exclusão dos dados</summary>
-        <p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>
-        ${S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, fotos, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
+        ${S.mode==="db"
+          ?`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`
+          :`<p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>`}
+        ${S.mode==="db"&&!S.isOwner?`<p class="note">Só quem criou o diário pode apagar todos os dados.</p>`:S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, fotos, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
         `<button type="button" class="btn danger" id="erase-start" ${ro?"disabled":""}>Apagar todos os dados deste diário</button>`}
       </details></section>`;
   }
@@ -1205,7 +1208,8 @@ input.in{height:48px}
   }
 
   async function eraseAllData(){
-    if(S.erasing)return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
+    // No diário compartilhado, só o dono apaga tudo: um cuidador com permissão de edição (escola, avó) não pode sumir com o histórico da família.
+    if(S.erasing||(S.mode==="db"&&!S.isOwner))return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
     try{
       await Promise.allSettled(Object.values(queues));
       const fotoIds=[...new Set([...S.days.values()].flatMap(fotosDoDia))];
