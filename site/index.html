@@ -480,6 +480,7 @@ input.in{height:48px}
   // registrando refeições diferentes no mesmo dia não apaguem o registro uma da outra.
   // O documento do dia nunca é apagado: um registro removido vira null, e dias vazios são ignorados na leitura.
   function persist(iso,body,delta){
+    if(S.erasing)return Promise.reject({code:"erasing"});
     if(S.mode==="db"){
       const ref=S.db.doc("dias/"+iso);
       S.pending++;setSync("saving","Salvando…");
@@ -1202,18 +1203,23 @@ input.in{height:48px}
   async function eraseAllData(){
     if(S.erasing)return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
     try{
+      await Promise.allSettled(Object.values(queues));
       const fotoIds=[...new Set([...S.days.values()].flatMap(fotosDoDia))];
       if(S.mode==="db"){
+        if(fotoIds.length&&!S.assets)throw {code:"assets_unavailable"};
+        for(const id of fotoIds)await S.assets.delete(id);
         for(const iso of S.days.keys())await S.db.doc("dias/"+iso).delete();
         for(const iso of S.sensor.keys())await S.db.doc("sensor/"+iso).delete();
-        await S.db.doc("config/crianca").delete().catch(()=>{});
-        await S.db.doc("config/plano").delete().catch(()=>{});
-        if(S.assets)for(const id of fotoIds)await S.assets.delete(id).catch(()=>{});
+        await S.db.doc("config/crianca").delete();
+        await S.db.doc("config/plano").delete();
       }
-      [LOCAL_KEY,LOCAL_KEY+"-sensor",LOCAL_KEY+"-nome",LOCAL_KEY+"-plano"].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+      [LOCAL_KEY,LOCAL_KEY+"-sensor",LOCAL_KEY+"-nome",LOCAL_KEY+"-plano"].forEach(k=>localStorage.removeItem(k));
       S.days=new Map();S.sensor=new Map();S.nome="";S.plano="";S.eraseConfirm=false;S.erasing=false;
       setSync("saved","Todos os dados foram apagados");render();toast("Dados apagados");
-    }catch(e){S.erasing=false;setSync("error","Não foi possível apagar tudo");renderView();toast("A exclusão não terminou. Tente novamente.")}
+    }catch(e){
+      S.erasing=false;setSync("error","Não foi possível apagar tudo");renderView();
+      toast(e&&e.code==="assets_unavailable"?"As fotos não puderam ser acessadas. Nada foi confirmado como apagado.":"A exclusão não terminou. Tente novamente.");
+    }
   }
 
   /* ---------- relatório PDF ---------- */
