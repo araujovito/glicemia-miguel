@@ -129,7 +129,7 @@ A planilha tem 5 abas:
 - *Como usar*
 - *Folha diária A4*
 
-A aba de preenchimento também possui horários, carboidratos, local da aplicação e etiquetas. As sete primeiras colunas continuam compatíveis com o CSV exportado pelo site.
+A aba de preenchimento também possui horários, carboidratos, local da aplicação e etiquetas. As sete primeiras colunas continuam compatíveis com o CSV exportado pelo site, e as colunas seguintes aparecem na mesma ordem nos dois arquivos.
 
 As datas de todas as abas saem da **data do primeiro dia**, que fica na aba *Como usar* e pode ser trocada.
 
@@ -153,7 +153,7 @@ O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 - **Não sugere nada de tratamento.** O site registra e resume, mas não calcula dose, não define meta e não classifica um valor como "bom" ou "ruim". O plano para hipoglicemia é texto livre, escrito pela família conforme a orientação da equipe médica.
 - **Fotos sem localização.** A foto é recomprimida no próprio aparelho antes de ser salva. Isso diminui o arquivo e remove os metadados, inclusive a localização GPS.
 - **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
-- **O CSV começa com as colunas da planilha Excel.** As 7 primeiras colunas são as mesmas da planilha. As colunas que vieram depois (etiquetas, carboidratos, local da aplicação) ficam no fim, para que colar na planilha continue funcionando.
+- **O CSV segue as colunas da planilha Excel.** As 7 primeiras colunas preservam o formato antigo; depois vêm os três horários, carboidratos, local da aplicação e etiquetas, na mesma ordem da planilha.
 - **Cada gravação envia só o que mudou.** O site usa `update`, que mescla, em vez de regravar o dia inteiro. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. O banco não tem transações, então duas pessoas editando *a mesma* refeição ao mesmo tempo continuam no "último a salvar vence".
 - **"Das outras vezes" só mostra, não julga.** A busca compara palavras: ignora acentos e palavras como "com" e "copo", e trata plurais simples. As refeições vêm ordenadas pela semelhança. Não há cor de "bom" ou "ruim", pela mesma regra de não definir metas.
 - **Perfis sem metas.** O perfil por refeição e o AGP mostram mediana, faixas de percentis, coeficiente de variação e desvio padrão, sem faixa-alvo, tempo no alvo (TIR) ou GMI. Os dois primeiros dependem de metas que só a equipe médica define. O GMI estimaria a hemoglobina glicada, que o projeto decidiu não estimar. As faixas de 25–75% só aparecem com 4 medições ou mais (5 por hora no AGP), e buracos nos dados interrompem as linhas em vez de inventar valores.

@@ -870,15 +870,15 @@ input.in{height:48px}
   function csv(){
     const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
     const n=(v,d)=>has(v)?Number(v).toLocaleString("pt-BR",{maximumFractionDigits:d||0,useGrouping:false}):"";
-    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas","Carboidratos (g)","Local da aplicação"].join(";")];
+    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Horário antes","Horário da refeição/insulina","Horário 2h depois","Carboidratos (g)","Local da aplicação","Etiquetas"].join(";")];
     daysWithData().reverse().forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", "),n(m.carbo,1),localNome(m.local)].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,m.antesHora,m.refeicaoHora,m.depoisHora,n(m.carbo,1),localNome(m.local),(m.tags||[]).join(", ")].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>extrasOf(iso).forEach(x=>{
-      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"","","",""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"",x.hora||"","","","","",""].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>hiposOf(iso).forEach(x=>{
       const det=[x.situacao&&"Situação: "+x.situacao,(x.sintomas||[]).length&&"Sintomas: "+x.sintomas.join(", "),has(x.tratamento)&&"Feito: "+x.tratamento,
         has(x.nova)&&"Nova medição: "+n(x.nova)+" mg/dL"+(x.novaHora?" às "+x.novaHora:""),has(x.obs)&&x.obs].filter(Boolean).join(" | ");
-      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,"","",""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,x.hora||"","","","","",""].map(q).join(";"));}));
     return "﻿"+lines.join("\r\n");
   }
 
