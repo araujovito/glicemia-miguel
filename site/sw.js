@@ -1,7 +1,7 @@
 "use strict";
 const CACHE_PREFIX="diario-glicemia-";
-const CACHE=CACHE_PREFIX+"v3";
-const APP=["./","./index.html","./logic.js","./manifest.webmanifest","./icon.svg"];
+const CACHE=CACHE_PREFIX+"v4";
+const APP=["./","./index.html","./logic.js","./config.js","./supabase.js","./vendor/supabase-js-2.117.2.js","./manifest.webmanifest","./icon.svg"];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",event=>{

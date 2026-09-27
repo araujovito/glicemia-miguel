@@ -117,7 +117,7 @@ test("modo offline guarda somente a estrutura pública do site",{timeout:15000},
     if(!app)return [];
     return (await caches.open(app).then(cache=>cache.keys())).map(request=>new URL(request.url).pathname).sort();
   });
-  assert.deepEqual(cached,["/site/","/site/icon.svg","/site/index.html","/site/logic.js","/site/manifest.webmanifest"]);
+  assert.deepEqual(cached,["/site/","/site/config.js","/site/icon.svg","/site/index.html","/site/logic.js","/site/manifest.webmanifest","/site/supabase.js","/site/vendor/supabase-js-2.117.2.js"]);
   assert.equal(cached.some(item=>item.includes("_blob")),false);
 
   await context.setOffline(true);

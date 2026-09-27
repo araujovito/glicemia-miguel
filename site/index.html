@@ -210,6 +210,15 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .restore-plan{margin:8px 0 0;padding-left:18px;font-size:.9rem;display:grid;gap:4px}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
+/* conta e pessoas com acesso (fora do Claude) */
+.conta{margin-top:12px}
+.pessoas{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}
+.pessoas li{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:8px}
+.pessoas li span{display:grid;min-width:0}
+.pessoas small{color:var(--muted);font-size:.8rem;overflow-wrap:anywhere}
+.convite{display:grid;gap:8px;margin-top:14px}
+.convite label{font-weight:700}
+
 /* navegação inferior */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
@@ -315,7 +324,8 @@ input.in{height:48px}
   const DEMO=new URLSearchParams(location.search).get("demo")==="1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
               period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, user:null, uid:null, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
-              backup:{busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
+              backup:{busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false,
+              convite:{email:"",papel:"cuidador"} };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -508,32 +518,104 @@ input.in{height:48px}
     let settled=false;
     const fallback=()=>{if(settled)return;settled=true;S.mode="local";loadLocal();render()};
     const use=window.claude&&window.claude.use;
-    if(!use){fallback();return}
+    if(!use){iniciarForaDoClaude().then(usou=>{if(!usou)fallback()},fallback);return}
     window.claude.use("db").then(db=>{
       if(!db){fallback();return}
-      settled=true;S.db=db;S.mode="db";render();
-      db.collection("dias").onSnapshot(snap=>{
-        const m=new Map();
-        snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});
-        if(S.editing&&!S.editing.saving&&!S.editing.force&&recordChanged(editingRecord(m,S.editing),S.editing.baseUpdated)){S.editing.conflict=true;showConflict()}
-        S.days=m;
-        if(!S.editing)render(); else renderView();
-      },err=>{
-        S.mode="offline";render();
-      });
-      db.doc("config/crianca").onSnapshot(d=>{if(d.exists){S.nome=d.data().nome||"";renderTop();if(!S.editing)renderView()}},()=>{});
-      db.doc("config/plano").onSnapshot(d=>{S.plano=d.exists&&d.data().texto||"";if(!S.editing)renderView()},()=>{});
-      db.collection("sensor").onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});S.sensor=m;if(!S.editing)renderView()},()=>{});
+      settled=true;ligarBanco(db);
     }).catch(fallback);
     window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
-    window.claude.use("user").then(u=>{
-      if(!u)return;S.user=u;
-      u.id().then(id=>{S.uid=id});
-      u.isOwner().then(v=>{S.isOwner=v;if(S.tab==="resumo"&&!S.editing)renderView()});
-      fillNames();
-      // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
-      u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
-    }).catch(()=>{});
+    window.claude.use("user").then(u=>{if(u)ligarUsuario(u)}).catch(()=>{});
+  }
+  // Mesmo código para o banco do Claude e para o Supabase: supabase.js imita a interface do Claude.
+  function ligarBanco(db){
+    S.db=db;S.mode="db";render();
+    db.collection("dias").onSnapshot(snap=>{
+      const m=new Map();
+      snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});
+      if(S.editing&&!S.editing.saving&&!S.editing.force&&recordChanged(editingRecord(m,S.editing),S.editing.baseUpdated)){S.editing.conflict=true;showConflict()}
+      S.days=m;
+      if(!S.editing)render(); else renderView();
+    },err=>{
+      S.mode="offline";render();
+    });
+    db.doc("config/crianca").onSnapshot(d=>{S.nome=d.exists&&d.data().nome||"";renderTop();if(!S.editing)renderView()},()=>{});
+    db.doc("config/plano").onSnapshot(d=>{S.plano=d.exists&&d.data().texto||"";if(!S.editing)renderView()},()=>{});
+    db.collection("sensor").onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});S.sensor=m;if(!S.editing)renderView()},()=>{});
+  }
+  function ligarUsuario(u){
+    S.user=u;
+    u.id().then(id=>{S.uid=id});
+    u.isOwner().then(v=>{S.isOwner=v;if(S.tab==="resumo"&&!S.editing)renderView()});
+    fillNames();
+    // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
+    u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
+  }
+
+  /* ---------- fora do Claude: Supabase com login Google ---------- */
+  // config.js diz qual projeto usar. Sem ele, ou com os campos vazios, o site fica no modo local.
+  const SUPABASE_JS="vendor/supabase-js-2.117.2.js";
+  async function iniciarForaDoClaude(){
+    try{await loadScript("config.js")}catch(e){return false}
+    const cfg=window.DIARIO_CONFIG||{};
+    if(!cfg.supabaseUrl||!cfg.supabaseAnonKey)return false;
+    S.backend="supabase";render();
+    try{
+      await loadScript(SUPABASE_JS);await loadScript("supabase.js");
+      S.sb=window.DiarioSupabase.iniciar(cfg);
+      const sessao=await S.sb.sessao();
+      // Volta do login do Google: tira o código da barra de endereço.
+      if(/[?&]code=/.test(location.search))history.replaceState(null,"",location.pathname);
+      if(!sessao){S.mode="login";render();return true}
+      S.conta={uid:sessao.user.id,email:sessao.user.email||""};
+      await abrirDiario();
+    }catch(e){console.error(e);S.mode="offline";render()}
+    return true;
+  }
+  async function abrirDiario(){
+    const lista=await S.sb.meusDiarios();
+    if(!lista.length){S.mode="semacesso";render();return}
+    const aberto=S.sb.abrir(lista[0],S.conta.uid);
+    S.acesso=aberto.acesso;S.acessoDados=null;
+    ligarBanco(aberto.db);ligarUsuario(aberto.user);
+  }
+  function viewLogin(){
+    return `<section class="card conta"><strong>Entrar no diário</strong>
+      <p class="note">Os registros ficam num banco de dados protegido. Entre com a conta Google que recebeu o convite para este diário.</p>
+      <div class="actions"><button type="button" class="btn primary" id="login-google">Entrar com Google</button></div></section>`;
+  }
+  function viewSemAcesso(){
+    return `<section class="card conta"><strong>Nenhum diário para esta conta</strong>
+      <p class="note">Você entrou como <b>${esc(S.conta&&S.conta.email)}</b>. Para ver o diário, peça a quem cuida dele para convidar este e-mail (em Resumo → Pessoas com acesso) e toque em “Verificar de novo”.</p>
+      <div class="actions"><button type="button" class="btn primary" id="conta-verificar">Verificar de novo</button><button type="button" class="btn" id="conta-sair">Usar outra conta</button></div>
+      <p class="note">É o primeiro acesso da família? Crie o diário: você será o dono e poderá convidar os outros cuidadores.</p>
+      <div class="actions"><button type="button" class="btn" id="diario-criar">Criar um diário</button></div></section>`;
+  }
+  const PAPEIS={dono:"Dono",cuidador:"Cuidador: registra",leitor:"Leitor: só vê"};
+  function acessoCard(){
+    if(!S.acesso)return "";
+    const A=S.acessoDados, dono=S.acesso.papel==="dono";
+    const lista=!A?`<p class="note">Carregando…</p>`:`<ul class="pessoas">
+      ${A.membros.map(m=>`<li><span><strong>${esc(m.nome||m.email)}${m.eu?" (você)":""}</strong><small>${esc(m.email)} · ${PAPEIS[m.papel]}</small></span>
+        ${dono&&m.papel!=="dono"?`<button type="button" class="btn small" data-remover="${esc(m.user_id)}">Remover</button>`:""}</li>`).join("")}
+      ${A.convites.map(cv=>`<li><span><strong>${esc(cv.email)}</strong><small>Convite pendente · ${PAPEIS[cv.papel]}</small></span>
+        <button type="button" class="btn small" data-cancelar="${esc(cv.email)}">Cancelar</button></li>`).join("")}</ul>`;
+    const convite=dono?`<form id="convite-form" class="convite" novalidate>
+      <label for="convite-email">Convidar pelo e-mail da conta Google</label>
+      <input class="in" type="email" id="convite-email" autocomplete="off" inputmode="email" placeholder="nome@gmail.com" value="${esc(S.convite.email)}">
+      <select class="in" id="convite-papel" aria-label="Papel">${["cuidador","leitor"].map(p=>`<option value="${p}"${S.convite.papel===p?" selected":""}>${PAPEIS[p]}</option>`).join("")}</select>
+      <button type="submit" class="btn primary">Convidar</button></form>`:"";
+    return `<section class="card" style="margin-top:12px"><strong>Pessoas com acesso</strong>${lista}${convite}
+      <p class="note" id="acesso-msg" role="status"${S.acessoMsg?"":" hidden"}>${esc(S.acessoMsg||"")}</p>
+      <div class="actions"><button type="button" class="btn" id="conta-sair">Sair desta conta</button></div></section>`;
+  }
+  async function carregarAcesso(){
+    if(!S.acesso||S.acessoCarregando)return;S.acessoCarregando=true;
+    try{S.acessoDados=await S.acesso.listar()}catch(e){S.acessoMsg="Não foi possível carregar a lista de pessoas."}
+    finally{S.acessoCarregando=false;if(S.tab==="resumo"&&!S.editing)renderView()}
+  }
+  async function acaoAcesso(fn,ok){
+    try{await fn();S.acessoMsg=ok;S.acessoDados=null;await carregarAcesso()}
+    catch(e){S.acessoMsg=e&&e.code==="invalid_argument"?"Sem permissão para isso.":"Não deu certo. Confira a conexão e tente de novo.";renderView()}
   }
 
   /* ---------- lógica de refeições ---------- */
@@ -554,7 +636,9 @@ input.in{height:48px}
 
   function renderTop(){
     const onDay=S.tab==="dia";
-    $("datenav").hidden=!onDay;
+    const conta=S.mode==="login"||S.mode==="semacesso";
+    $("datenav").hidden=!onDay||conta;
+    document.querySelector(".tabs").hidden=conta;
     $("datelabel").textContent=longDate(S.date);
     $("brand").innerHTML=S.nome?`Glicemia · <span>${esc(S.nome)}</span>`:`Diário de <span>Glicemia</span>`;
     const dp=$("datepick");dp.value=S.date;dp.max=todayIso();
@@ -572,9 +656,11 @@ input.in{height:48px}
   function renderView(){
     const v=$("view");
     if(S.mode==="loading"){v.innerHTML='<p class="note">Carregando registros…</p>';return}
+    if(S.mode==="login"){v.innerHTML=viewLogin();return}
+    if(S.mode==="semacesso"){v.innerHTML=viewSemAcesso();return}
     if(S.tab==="dia")v.innerHTML=viewDay();
     else if(S.tab==="historico")v.innerHTML=viewHistory();
-    else v.innerHTML=viewSummary();
+    else{v.innerHTML=viewSummary();if(S.acesso&&!S.acessoDados)carregarAcesso()}
     fillNames();
   }
 
@@ -795,7 +881,7 @@ input.in{height:48px}
       ${S.dlMsg?`<p class="banner" role="alert">${esc(S.dlMsg)}</p>`:""}
       <p class="note" style="margin-top:10px">O PDF traz o período escolhido acima: ${R.isos.length?"médias por refeição, gráficos e o registro dia a dia":"o perfil do sensor"}${R.isos.length&&R.sensor?" e o perfil do sensor":""}.</p></section>`
       +(S.copyText!=null?`<textarea class="copybox" id="copybox" readonly aria-label="Resumo em texto" style="margin:0 0 12px">${esc(S.copyText)}</textarea>`:"");
-    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+(R.sensor?consulta+agpCard(R):"")+sensorCard()+backupCard();
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+(R.sensor?consulta+agpCard(R):"")+sensorCard()+acessoCard()+backupCard();
     h+=consulta;
     h+=`<section class="card"><div class="legend"><span><i style="background:var(--accent)"></i>Antes</span><span><i style="background:var(--after)"></i>2h depois</span><span>mg/dL</span></div>${chart(R.rows)}</section>`;
     h+=`<section class="card" style="margin-top:12px"><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>média</th><th class="num">Antes<br>mín–máx</th><th class="num">2h<br>média</th><th class="num">2h<br>mín–máx</th><th class="num">Variação<br>média</th><th class="num">Insulina<br>média</th><th class="num">Carbo<br>média (g)</th><th class="num">Medições</th></tr></thead><tbody>`;
@@ -829,6 +915,7 @@ input.in{height:48px}
         `</tbody></table></div></section>`;
     }
     h+=sensorCard();
+    h+=acessoCard();
     h+=backupCard();
     h+=`<p class="note">Este controle é para registro e acompanhamento. Metas, doses e decisões de tratamento seguem a equipe médica responsável.</p>`;
     return h;
@@ -1055,7 +1142,9 @@ input.in{height:48px}
       <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p>
       <details style="margin-top:18px" ${S.eraseConfirm||S.erasing?"open":""}><summary>Privacidade e exclusão dos dados</summary>
         ${S.mode==="db"
-          ?`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`
+          ?(S.backend==="supabase"
+            ?`<p class="note">Os registros ficam no banco de dados deste diário, e só as pessoas convidadas por e-mail, depois de entrar com a conta Google, conseguem vê-los. Apagar tudo remove os registros, o sensor, o nome e o plano para todos, em todos os aparelhos; as pessoas com acesso continuam. Faça uma cópia antes.</p>`
+            :`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`)
           :`<p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>`}
         ${S.mode==="db"&&!S.isOwner?`<p class="note">Só quem criou o diário pode apagar todos os dados.</p>`:S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
         `<button type="button" class="btn danger" id="erase-start" ${ro?"disabled":""}>Apagar todos os dados deste diário</button>`}
@@ -1172,7 +1261,8 @@ input.in{height:48px}
     if(S.erasing||(S.mode==="db"&&!S.isOwner))return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
     try{
       await Promise.allSettled(Object.values(queues));
-      if(S.mode==="db"){
+      if(S.mode==="db"&&S.db.apagarTudo)await S.db.apagarTudo();
+      else if(S.mode==="db"){
         for(const iso of S.days.keys())await S.db.doc("dias/"+iso).delete();
         for(const iso of S.sensor.keys())await S.db.doc("sensor/"+iso).delete();
         await S.db.doc("config/crianca").delete();
@@ -1680,7 +1770,14 @@ input.in{height:48px}
       S.editing.force=true;S.editing.conflict=false;
       if(S.editing.kind==="meal")submit();else if(S.editing.kind==="hipo")submitHipo();else submitExtra();return;
     }
+    if(t.dataset.remover){const m=S.acessoDados&&S.acessoDados.membros.find(x=>x.user_id===t.dataset.remover);
+      if(m&&confirm(`Remover o acesso de ${m.nome||m.email}? Os registros que essa pessoa fez continuam no diário.`))acaoAcesso(()=>S.acesso.remover(m.user_id),"Acesso removido.");return}
+    if(t.dataset.cancelar){acaoAcesso(()=>S.acesso.cancelarConvite(t.dataset.cancelar),"Convite cancelado.");return}
     switch(t.id){
+      case "login-google":S.sb.entrarComGoogle().catch(()=>toast("Não foi possível abrir o login do Google."));break;
+      case "conta-sair":S.sb.sair().finally(()=>location.reload());break;
+      case "conta-verificar":S.mode="loading";render();abrirDiario().catch(()=>{S.mode="offline";render()});break;
+      case "diario-criar":t.disabled=true;S.sb.criarDiario("").then(abrirDiario).catch(()=>{t.disabled=false;toast("Não foi possível criar o diário.")});break;
       case "prev":S.date=addDays(S.date,-1);render();break;
       case "next":if(S.date<todayIso()){S.date=addDays(S.date,1);render()}break;
       case "gotoday":S.date=todayIso();render();break;
@@ -1735,10 +1832,16 @@ input.in{height:48px}
   });
   document.addEventListener("pointerdown",e=>{const i=e.target.closest&&e.target.closest(".locais label")?.querySelector("input");if(i)i.dataset.era=i.checked?"1":""},true);
   document.addEventListener("click",e=>{const i=e.target.matches&&e.target.matches('input[name="f-local"]')?e.target:null;if(i&&i.dataset.era==="1"){i.checked=false;i.dataset.era=""}});
-  document.addEventListener("submit",e=>{if(e.target.id==="form"){e.preventDefault();submit()}else if(e.target.id==="hform"){e.preventDefault();submitHipo()}else if(e.target.id==="xform"){e.preventDefault();submitExtra()}});
+  document.addEventListener("submit",e=>{
+    if(e.target.id==="convite-form"){e.preventDefault();
+      const email=$("convite-email").value.trim().toLowerCase(), papel=$("convite-papel").value;
+      if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){S.acessoMsg="Confira o e-mail.";renderView();return}
+      acaoAcesso(()=>S.acesso.convidar(email,papel).then(()=>{S.convite={email:"",papel:"cuidador"}}),`Convite feito. ${email} entra quando fizer login com esta conta Google.`);return}
+    if(e.target.id==="form"){e.preventDefault();submit()}else if(e.target.id==="hform"){e.preventDefault();submitHipo()}else if(e.target.id==="xform"){e.preventDefault();submitExtra()}});
   document.addEventListener("input",e=>{
     const id=e.target.id;
     if(id==="rep-nome")return;
+    if(id==="convite-email"){S.convite.email=e.target.value;return}
     if(id==="erase-word"){const b=$("erase-confirm");if(b)b.disabled=e.target.value.trim()!=="APAGAR"||S.erasing;return}
     if(id==="x-valor"||id==="x-hora"){checkExtra(false);return}
     if(id==="h-valor"||id==="h-nova"||id==="h-hora"){checkHipo(false);return}
@@ -1747,6 +1850,7 @@ input.in{height:48px}
   });
   document.addEventListener("change",async e=>{
     const id=e.target.id;
+    if(id==="convite-papel"){S.convite.papel=e.target.value;return}
     if(id==="lv-file"){const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
       try{const r=lerLibreView(await f.text());r.novos=r.isos.filter(iso=>!S.sensor.has(iso)).length;S.imp.plano=r;S.imp.msg=null}
       catch(err){S.imp.plano=null;S.imp.msg=typeof err==="string"?err:NAO_LIBRE}
