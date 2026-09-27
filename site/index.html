@@ -170,6 +170,10 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .outra .vals{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
 .outra .va{color:var(--accent);font-weight:700} .outra .vd{color:var(--after);font-weight:700}
 .outra small{color:var(--muted);font-size:.84rem}
+.filebtn{position:relative;display:grid;place-items:center;cursor:pointer}
+.filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.filebtn:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.restore-plan{margin:8px 0 0;padding-left:18px;font-size:.9rem;display:grid;gap:4px}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
 /* fotos */
@@ -682,11 +686,13 @@ input.in{height:48px}
   // Serve para não depender de uma única conta: o arquivo fica com a família.
   const BACKUP_FORMATO="diario-glicemia-backup";
   function backupCard(){
-    const B=S.backup, n=daysWithData().length;
+    const B=S.backup, n=daysWithData().length, ro=S.readOnly||S.mode==="offline"||S.mode==="loading";
     return `<section class="card" style="margin-top:12px"><strong>Cópia de segurança</strong>
       <p class="note" style="margin-top:6px">Baixa um arquivo com todos os registros${n?` (${n} ${n===1?"dia":"dias"})`:""}, o nome e o plano da equipe médica. Guarde fora do celular, por exemplo no e-mail ou no Google Drive.</p>
       <label class="check" style="margin-top:8px"><input type="checkbox" id="bk-fotos" ${B.fotos?"checked":""}> Incluir as fotos dos pratos <span class="hint">(arquivo maior)</span></label>
-      <div class="actions"><button class="btn" id="bk-export"${B.busy||!n?" disabled":""}>Baixar cópia de segurança</button></div>
+      <div class="actions"><button class="btn" id="bk-export"${B.busy||!n?" disabled":""}>Baixar cópia de segurança</button>
+      ${ro||B.busy||B.plano?"":`<label class="btn filebtn">Restaurar de uma cópia<input type="file" id="bk-file" accept=".json,application/json"></label>`}</div>
+      ${B.plano?planoHtml(B.plano):""}
       <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p></section>`;
   }
   function setBackupMsg(msg){S.backup.msg=msg;const el=$("bk-msg");if(el){el.textContent=msg||"";el.hidden=!msg}}
@@ -718,6 +724,78 @@ input.in{height:48px}
       else if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;setBackupMsg(null)}
       else setBackupMsg("Não foi possível baixar a cópia agora. Tente de novo.");
     }finally{B.busy=false;renderView()}
+  }
+
+  // Restauração: junta a cópia com o que já existe, sem apagar nada que seja mais novo.
+  // Dia que só existe na cópia entra; dia que existe nos dois fica com a versão alterada por último (atualizadoEm).
+  const COPIA_INVALIDA="Este arquivo não é uma cópia de segurança do diário.";
+  function lerCopia(texto){
+    let c;try{c=JSON.parse(texto)}catch(e){throw COPIA_INVALIDA}
+    if(!c||c.formato!==BACKUP_FORMATO||!c.dias||typeof c.dias!=="object")throw COPIA_INVALIDA;
+    if(c.versao!==1)throw "Esta cópia foi feita por uma versão mais nova do site. Atualize a página e tente de novo.";
+    const dias={},fotos={};
+    // O arquivo vem de fora: só entram chaves de data válidas, dias em forma de objeto e fotos em data URL de imagem.
+    Object.entries(c.dias).forEach(([iso,d])=>{if(/^\d{4}-\d{2}-\d{2}$/.test(iso)&&d&&typeof d==="object"&&!Array.isArray(d))dias[iso]=d});
+    Object.entries(c.fotos||{}).forEach(([id,u])=>{if(typeof u==="string"&&/^data:image\/(jpeg|png|webp);base64,/.test(u))fotos[id]=u});
+    return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,fotos};
+  }
+  function planejarRestauracao(c){
+    const novos=[],trocar=[],manter=[];
+    Object.keys(c.dias).sort().forEach(iso=>{
+      if(!dayHas(iso))novos.push(iso);
+      else if((+c.dias[iso].atualizadoEm||0)>(+S.days.get(iso).atualizadoEm||0))trocar.push(iso);
+      else manter.push(iso);
+    });
+    return {c,novos,trocar,manter};
+  }
+  function planoHtml(P){
+    const q=n=>n===1?"1 dia":n+" dias", quando=P.c.exportadoEm&&!isNaN(new Date(P.c.exportadoEm))?" de "+fmtDM.format(new Date(P.c.exportadoEm)):"";
+    const nada=!P.novos.length&&!P.trocar.length;
+    return `<div class="confirm"><strong>Cópia${esc(quando)}: ${q(Object.keys(P.c.dias).length)}</strong>
+      ${nada?`<span>Nada a restaurar: tudo o que está na cópia já está aqui.</span>`:`<ul class="restore-plan">
+        ${P.novos.length?`<li>${q(P.novos.length)} que não ${P.novos.length===1?"existe":"existem"} aqui ${P.novos.length===1?"será adicionado":"serão adicionados"}.</li>`:""}
+        ${P.trocar.length?`<li>${q(P.trocar.length)} ${P.trocar.length===1?"será trocado":"serão trocados"} pela versão da cópia, que foi alterada depois.</li>`:""}
+        ${P.manter.length?`<li>${q(P.manter.length)} ${P.manter.length===1?"fica":"ficam"} como ${P.manter.length===1?"está":"estão"}, porque a versão daqui é igual ou mais recente.</li>`:""}</ul>`}
+      <div>${nada?`<button type="button" class="btn" id="bk-cancel" style="grid-column:1 / -1">Fechar</button>`
+        :`<button type="button" class="btn" id="bk-cancel">Cancelar</button><button type="button" class="btn primary" id="bk-restore">Restaurar</button>`}</div></div>`;
+  }
+  function dataUrlToBlob(u){const [cab,b64]=u.split(",");const bin=atob(b64),a=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)a[i]=bin.charCodeAt(i);return new Blob([a],{type:cab.slice(5,cab.indexOf(";"))})}
+  async function fotoExiste(id){try{const r=await fetch(fotoUrl(id));return r.ok}catch(e){return false}}
+  async function restaurar(){
+    const B=S.backup, P=B.plano;if(!P||B.busy)return;
+    B.busy=true;B.plano=null;renderView();
+    const alvo=[...P.novos,...P.trocar], troca={};let semFoto=0, falhas=0;
+    try{
+      // Fotos: se o id ainda existe neste Artifact, reaproveita; senão, envia de novo a partir da cópia (id novo).
+      const ids=[...new Set(alvo.flatMap(iso=>fotosDoDia(P.c.dias[iso])))];
+      for(let i=0;i<ids.length;i++){
+        setBackupMsg(`Restaurando as fotos: ${i+1} de ${ids.length}…`);
+        const id=ids[i];
+        if(S.mode==="db"&&await fotoExiste(id)){troca[id]=id;continue}
+        if(S.assets&&P.c.fotos[id]){
+          try{const r=await S.assets.upload(dataUrlToBlob(P.c.fotos[id]),{type:"image/jpeg"});troca[id]=r.id;S.fotoUrls[r.id]=r.url;continue}catch(e){}
+        }
+        semFoto++;
+      }
+      for(let i=0;i<alvo.length;i++){
+        const iso=alvo[i];setBackupMsg(`Restaurando os dias: ${i+1} de ${alvo.length}…`);
+        const d=JSON.parse(JSON.stringify(P.c.dias[iso]));d.data=iso;
+        Object.values(d.refeicoes||{}).forEach(m=>{if(m&&Array.isArray(m.fotos)){m.fotos=m.fotos.map(id=>troca[id]).filter(Boolean);if(!m.fotos.length)delete m.fotos}});
+        if(S.mode==="db"){
+          const ref=S.db.doc("dias/"+iso);
+          const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(()=>ref.set(d));queues[iso]=job;
+          try{await job;S.days.set(iso,d)}
+          catch(e){if(e&&e.code==="invalid_argument"){S.readOnly=true;throw "Sem permissão para salvar. A restauração parou."}falhas++}
+        }else S.days.set(iso,d);
+      }
+      if(S.mode!=="db"&&!saveLocal())throw "Não há espaço neste navegador para restaurar a cópia.";
+      if(!S.nome&&P.c.nome){S.nome=P.c.nome;await saveNome(P.c.nome).catch(()=>{})}
+      if(!S.plano&&P.c.plano){S.plano=P.c.plano;await savePlano(P.c.plano).catch(()=>{})}
+      const feitos=alvo.length-falhas;
+      setBackupMsg(`Cópia restaurada: ${feitos} ${feitos===1?"dia":"dias"}.`+(falhas?` ${falhas} não ${falhas===1?"pôde":"puderam"} ser salvos; tente restaurar de novo.`:"")
+        +(semFoto?` ${semFoto} ${semFoto===1?"foto não voltou":"fotos não voltaram"} ${S.mode==="db"?"(não estavam na cópia)":"(o modo local não guarda fotos)"}.`:""));
+    }catch(err){setBackupMsg(typeof err==="string"?err:"A restauração parou por um erro. Os dias já restaurados foram mantidos; tente de novo.")}
+    finally{B.busy=false;render()}
   }
 
   /* ---------- relatório PDF ---------- */
@@ -1209,6 +1287,8 @@ input.in{height:48px}
         catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
         break}
       case "bk-export":exportBackup();break;
+      case "bk-cancel":S.backup.plano=null;setBackupMsg(null);renderView();break;
+      case "bk-restore":restaurar();break;
       case "csv":{
         const dl=await getDownloads();if(!dl)break;
         try{await dl.save({filename:`glicemia-${todayIso()}.csv`,data:csv()});toast("Planilha baixada")}
@@ -1228,6 +1308,10 @@ input.in{height:48px}
   document.addEventListener("change",async e=>{
     const id=e.target.id;
     if(id==="bk-fotos"){S.backup.fotos=e.target.checked;return}
+    if(id==="bk-file"){const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
+      try{S.backup.plano=planejarRestauracao(lerCopia(await f.text()));S.backup.msg=null}
+      catch(err){S.backup.plano=null;S.backup.msg=typeof err==="string"?err:COPIA_INVALIDA}
+      renderView();return}
     if(id==="f-foto"){const f=e.target.files&&e.target.files[0];e.target.value="";addFoto(f);return}
     if(id==="x-lo"||id==="x-hi"){const other=$(id==="x-lo"?"x-hi":"x-lo");if(e.target.checked)other.checked=false;const v=$("x-valor");v.disabled=$("x-lo").checked||$("x-hi").checked;if(v.disabled)v.value="";checkExtra(false);return}
     if(id==="rep-nome"){const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
