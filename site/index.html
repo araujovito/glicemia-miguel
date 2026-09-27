@@ -137,6 +137,7 @@ details.tabela{margin-top:8px} details.tabela summary{cursor:pointer;color:var(-
 .chart .curva{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
 .chart .scan{fill:var(--accent);stroke:var(--surface);stroke-width:2}
 .chart .mk{stroke:var(--hypo);stroke-width:2} .chart .mkt{fill:var(--hypo);font:10px var(--sans)}
+.chart .f90{fill:var(--accent);opacity:.16} .chart .f50{fill:var(--accent);opacity:.38}
 .charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
@@ -654,7 +655,15 @@ input.in{height:48px}
     const locais=LOCAIS.map(l=>{let n=0,ultimo=null;isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(m&&m.local===l.k){n++;if(!ultimo||iso>ultimo)ultimo=iso}}));return {l,n,ultimo}});
     const todas=[...allA,...allD], dp=desvio(todas), media=avg(todas);
     const cv=dp!=null&&media?dp/media*100:null;
-    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length,locais,nLocais:locais.reduce((s,x)=>s+x.n,0)};
+    // Sensor no período: só leituras automáticas (tipo 0), como no AGP. Escaneamentos repetiriam momentos já cobertos.
+    const sDias=[...S.sensor.keys()].filter(i=>i>=start&&i<=end&&pontosSensor(i).some(p=>p.tipo===0)).sort();
+    const porHora=Array.from({length:24},()=>[]), sTodas=[];
+    sDias.forEach(iso=>pontosSensor(iso).forEach(p=>{if(p.tipo!==0)return;porHora[Math.floor(p.min/60)].push(p.mg);sTodas.push(p.mg)}));
+    const sDp=desvio(sTodas), sMedia=avg(sTodas);
+    const sensor=sDias.length?{dias:sDias,n:sTodas.length,media:sMedia,dp:sDp,cv:sDp!=null&&sMedia?sDp/sMedia*100:null,
+      cobertura:sTodas.length/(sDias.length*96)*100,
+      horas:porHora.map(v=>v.length?{n:v.length,p5:percentil(v,.05),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),p95:percentil(v,.95)}:null)}:null;
+    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length,locais,sensor,nLocais:locais.reduce((s,x)=>s+x.n,0)};
   }
 
   function chart(rows){
@@ -726,7 +735,7 @@ input.in{height:48px}
       <div class="stat"><b>${fmt(avg(R.allA))}</b><small>média antes</small></div>
       <div class="stat"><b>${fmt(avg(R.allD))}</b><small>média 2h depois</small></div>
       <div class="stat hypo"><b>${R.hipos.length}</b><small>${R.hipos.length===1?"hipoglicemia registrada":"hipoglicemias registradas"}</small></div></div>`;
-    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+sensorCard()+backupCard();
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+agpCard(R)+sensorCard()+backupCard();
     h+=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
       <div class="field" style="margin-top:8px"><label for="rep-nome">Nome da criança</label>
       <input class="in" id="rep-nome" autocomplete="off" value="${esc(S.nome)}" placeholder="Nome da criança"></div>
@@ -744,6 +753,7 @@ input.in{height:48px}
       h+=`<tr><td>${r.x.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${r.na?fmt(r.amin)+"–"+fmt(r.amax):"–"}</td><td class="num">${fmt(r.d)}</td><td class="num">${r.nd?fmt(r.dmin)+"–"+fmt(r.dmax):"–"}</td><td class="num">${r.diff==null?"–":(r.diff>0?"+":"")+fmt(r.diff)}</td><td class="num">${fmt(r.ins,1)}</td><td class="num">${fmt(r.carbo)}</td><td class="num">${r.na}/${r.nd}</td></tr>`;
     });
     h+=`</tbody></table></div><p class="note">Variação média = 2h depois − antes, só nas refeições com as duas medições. Medições = antes/2h.</p></section>`;
+    h+=agpCard(R);
     h+=perfilCard(R);
     if(R.nLocais){
       const mx=Math.max(...R.locais.map(x=>x.n));
@@ -912,6 +922,44 @@ input.in{height:48px}
         <div><b>${fmt(avg(vs))}</b><small>média</small></div><div><b>${fmt(Math.min(...vs))}</b><small>menor</small></div><div><b>${fmt(Math.max(...vs))}</b><small>maior</small></div></div>
       ${curvaDia(pts,iso)}
       <p class="note" style="margin-top:4px">Linha: leituras automáticas. Pontos: escaneamentos. Toque na curva para ver o horário e o valor.</p></section>`;
+  }
+  /* AGP (Ambulatory Glucose Profile) com as leituras do sensor: todos os dias do período sobrepostos, hora a hora.
+     Faixa clara: 5% a 95% das leituras; faixa escura: 25% a 75%; linha: mediana. */
+  const MIN_HORA=5;   // hora com menos leituras que isso fica de fora das faixas
+  function agpChart(horas){
+    const W=340,H=210,L=34,R=6,T=10,B=22,pw=W-L-R,ph=H-T-B;
+    const ok=horas.map((h,i)=>h&&h.n>=MIN_HORA?Object.assign({i},h):null).filter(Boolean);
+    const lo=Math.max(0,Math.floor((Math.min(...ok.map(h=>h.p5))-10)/50)*50), hi=Math.max(lo+100,Math.ceil((Math.max(...ok.map(h=>h.p95))+10)/50)*50), step=hi-lo>250?100:50;
+    const x=i=>L+(i+.5)/24*pw, y=v=>T+ph-(v-lo)/(hi-lo)*ph;
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Perfil do sensor por hora do dia: mediana e faixas de 25 a 75% e de 5 a 95%">`;
+    for(let v=lo;v<=hi;v+=step)s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+    [0,6,12,18,24].forEach(h=>s+=`<text class="axis" x="${L+h/24*pw}" y="${H-6}" text-anchor="${h===0?"start":h===24?"end":"middle"}">${h}h</text>`);
+    // horas seguidas com dados formam um trecho; um buraco interrompe as faixas e a linha
+    const trechos=[];ok.forEach(h=>{const t=trechos[trechos.length-1];if(t&&t[t.length-1].i===h.i-1)t.push(h);else trechos.push([h])});
+    const area=(t,a,b)=>"M"+t.map(h=>x(h.i).toFixed(1)+" "+y(h[a]).toFixed(1)).join("L")+"L"+t.slice().reverse().map(h=>x(h.i).toFixed(1)+" "+y(h[b]).toFixed(1)).join("L")+"Z";
+    trechos.forEach(t=>{
+      if(t.length===1){const h=t[0];s+=`<rect class="f90" x="${x(h.i)-3}" y="${y(h.p95)}" width="6" height="${y(h.p5)-y(h.p95)}"/><rect class="f50" x="${x(h.i)-3}" y="${y(h.p75)}" width="6" height="${y(h.p25)-y(h.p75)}"/>`;return}
+      s+=`<path class="f90" d="${area(t,"p95","p5")}"/><path class="f50" d="${area(t,"p75","p25")}"/><path class="curva" d="M${t.map(h=>x(h.i).toFixed(1)+" "+y(h.med).toFixed(1)).join("L")}"/>`;
+    });
+    ok.forEach(h=>s+=`<rect class="hit" x="${L+h.i/24*pw}" y="${T}" width="${pw/24}" height="${ph}" data-tip="${pad(h.i)}h–${pad(h.i+1)}h (${h.n} leituras)\nMediana ${fmt(h.med)} mg/dL\nMetade central: ${fmt(h.p25)} a ${fmt(h.p75)}\n90% das leituras: ${fmt(h.p5)} a ${fmt(h.p95)}"/>`);
+    return s+`</svg>`;
+  }
+  function agpCard(R){
+    const Sn=R.sensor;if(!Sn||!Sn.horas.some(h=>h&&h.n>=MIN_HORA))return "";
+    const dm=iso=>fmtDM.format(parseIso(iso)).slice(0,5);
+    return `<section class="card" style="margin-top:12px"><strong>Perfil do sensor (AGP)</strong>
+      <p class="note" style="margin-top:4px">${Sn.dias.length} ${Sn.dias.length===1?"dia":"dias"} de sensor (${dm(Sn.dias[0])} a ${dm(Sn.dias[Sn.dias.length-1])}) sobrepostos, hora a hora.${Sn.dias.length<14?" O relatório AGP costuma usar 14 dias.":""}</p>
+      <div class="stats" style="margin:10px 0 4px">
+        <div class="stat"><b>${fmt(Sn.media)}</b><small>média do sensor (mg/dL)</small></div>
+        <div class="stat"><b>${Sn.cv==null?"–":fmt(Sn.cv)+"%"}</b><small>coeficiente de variação</small></div>
+        <div class="stat"><b>${fmt(Math.min(100,Sn.cobertura))}%</b><small>do tempo com leitura</small></div>
+        <div class="stat"><b>${fmt(Sn.n)}</b><small>leituras automáticas</small></div></div>
+      <div class="legend"><span><i style="background:var(--accent)"></i>Mediana</span><span><i style="background:var(--accent);opacity:.38"></i>25–75%</span><span><i style="background:var(--accent);opacity:.16"></i>5–95%</span></div>
+      ${agpChart(Sn.horas)}
+      <p class="note" style="margin-top:4px">Em cada hora: a linha é a mediana, a faixa escura reúne a metade central das leituras e a clara, 90% delas. Horas com menos de ${MIN_HORA} leituras ficam de fora.</p>
+      <details class="tabela"><summary>Ver em tabela</summary><div class="tablewrap"><table><thead><tr><th>Hora</th><th class="num">Mediana</th><th class="num">25–75%</th><th class="num">5–95%</th><th class="num">Leituras</th></tr></thead><tbody>
+        ${Sn.horas.map((h,i)=>`<tr><td>${pad(i)}h</td>${h&&h.n>=MIN_HORA?`<td class="num">${fmt(h.med)}</td><td class="num">${fmt(h.p25)}–${fmt(h.p75)}</td><td class="num">${fmt(h.p5)}–${fmt(h.p95)}</td>`:`<td class="num">–</td><td class="num">–</td><td class="num">–</td>`}<td class="num">${h?h.n:0}</td></tr>`).join("")}
+      </tbody></table></div></details></section>`;
   }
   function sensorCard(){
     const I=S.imp, ro=S.readOnly||S.mode==="offline"||S.mode==="loading", dias=[...S.sensor.keys()].filter(k=>(S.sensor.get(k).min||[]).length).sort();
