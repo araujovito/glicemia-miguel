@@ -291,8 +291,10 @@ input.in{height:48px}
   const MAX_FOTOS=3;
   function fotoUrl(id){return S.fotoUrls[id]||("/_blob/"+id)}
   function thumbs(ids){return ids&&ids.length?`<span class="thumbs">${ids.map(id=>`<button type="button" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato" loading="lazy"></button>`).join("")}</span>`:""}
-  function hiposOf(iso){const d=S.days.get(iso);return (d&&Array.isArray(d.hipos)?d.hipos:[]).slice().sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
-  function extrasOf(iso){const d=S.days.get(iso);return (d&&Array.isArray(d.extras)?d.extras:[]).slice().sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
+  // Hipoglicemias e medições extras ficam num mapa {id: registro}. Dias gravados antes disso usam lista; os dois formatos são lidos.
+  function listOf(v){return (Array.isArray(v)?v:Object.values(v||{})).filter(Boolean)}
+  function hiposOf(iso){const d=S.days.get(iso);return listOf(d&&d.hipos).sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
+  function extrasOf(iso){const d=S.days.get(iso);return listOf(d&&d.extras).sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
   function dayHas(iso){return MEALS.some(x=>mealFilled(mealOf(iso,x.k)))||hiposOf(iso).length>0||extrasOf(iso).length>0}
   function dayTags(iso){const t=new Set();MEALS.forEach(x=>{const m=mealOf(iso,x.k);(m&&m.tags||[]).forEach(g=>t.add(g))});return [...t]}
   function extraValor(x){return x.lo?"LO":x.hi?"HI":has(x.valor)?fmt(+x.valor):"–"}
@@ -311,10 +313,16 @@ input.in{height:48px}
   function saveLocal(){
     try{localStorage.setItem(LOCAL_KEY,JSON.stringify(Object.fromEntries(S.days)));return true}catch(e){return false}
   }
-  function persist(iso,body){
+  // No banco, grava só o trecho que mudou (update mescla objetos aninhados), para que duas pessoas
+  // registrando refeições diferentes no mesmo dia não apaguem o registro uma da outra.
+  // O documento do dia nunca é apagado: um registro removido vira null, e dias vazios são ignorados na leitura.
+  function persist(iso,body,delta){
     if(S.mode==="db"){
       const ref=S.db.doc("dias/"+iso);
-      const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(()=>body?ref.set(body):ref.delete());
+      const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(async()=>{
+        try{await ref.update(delta)}
+        catch(e){if(e&&e.code==="invalid_argument")return ref.set(body);throw e}   // dia ainda não existe (ou sem permissão: o set rejeita de novo)
+      });
       queues[iso]=job;
       return job;
     }
@@ -858,8 +866,7 @@ input.in{height:48px}
       tratamento:$("h-trat").value.trim(),nova:parseNum($("h-nova").value),novaHora:$("h-novahora").value,obs:$("h-obs").value.trim(),
       criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
     const clean={};Object.entries(h).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
-    const list=hiposOf(iso).filter(x=>x.id!==clean.id);list.push(clean);
-    writeDay(iso,{hipos:list});
+    writeDay(iso,{tipo:"hipo",chave:clean.id,valor:clean});
   }
   function showPlanoEdit(on){
     $("plano-edit").hidden=!on;
@@ -909,8 +916,7 @@ input.in{height:48px}
     const x={id:id||("x"+Date.now().toString(36)),hora:$("x-hora").value,valor:lo||hi?null:parseNum($("x-valor").value),lo:lo||null,hi:hi||null,
       momento:mom?mom.value:"",obs:$("x-obs").value.trim(),criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
     const clean={};Object.entries(x).forEach(([a,b])=>{if(has(b))clean[a]=b});
-    const list=extrasOf(iso).filter(e=>e.id!==clean.id);list.push(clean);
-    writeDay(iso,{extras:list});
+    writeDay(iso,{tipo:"extra",chave:clean.id,valor:clean});
   }
 
   function openExtra(iso,id){S.editing={kind:"extra",iso,id:id||null};renderSheet()}
@@ -984,14 +990,23 @@ input.in{height:48px}
   function openHipo(iso,id){S.editing={kind:"hipo",iso,id:id||null};renderSheet()}
   function closeEditor(){S.editing=null;renderSheet();renderView()}
 
-  async function writeDay(iso,patch){
-    const had=S.days.get(iso);
-    const next=Object.assign({refeicoes:{},hipos:[],extras:[]},had||{},patch,{data:iso});
-    const any=Object.keys(next.refeicoes||{}).length>0||(next.hipos||[]).length>0||(next.extras||[]).length>0;
-    const body=any?Object.assign(next,{atualizadoEm:Date.now()}):null;
-    if(body)S.days.set(iso,body);else S.days.delete(iso);
+  // Mapa {id: registro} a partir do formato atual ou da lista antiga.
+  function asMap(v){if(Array.isArray(v)){const o={};v.forEach(x=>{if(x&&x.id)o[x.id]=x});return o}return Object.assign({},v||{})}
+  const CAMPO={refeicao:"refeicoes",hipo:"hipos",extra:"extras"};
+
+  // change = {tipo:"refeicao"|"hipo"|"extra", chave, valor}; valor null apaga o registro.
+  async function writeDay(iso,change){
+    const had=S.days.get(iso), campo=CAMPO[change.tipo], agora=Date.now();
+    const mapa=asMap(had&&had[campo]);
+    if(change.valor)mapa[change.chave]=change.valor;else delete mapa[change.chave];
+    const next=Object.assign({},had||{},{[campo]:mapa,data:iso,atualizadoEm:agora});
+    // Se o campo ainda está no formato de lista, o update substituiria a lista inteira: grava o mapa completo uma vez.
+    const parte=Array.isArray(had&&had[campo])?mapa:{[change.chave]:change.valor||null};
+    const delta={[campo]:parte,data:iso,atualizadoEm:agora};
+    const vazio=!Object.values(next.refeicoes||{}).some(Boolean)&&!listOf(next.hipos).length&&!listOf(next.extras).length;
+    if(vazio&&S.mode!=="db")S.days.delete(iso);else S.days.set(iso,next);
     closeEditor();
-    try{await persist(iso,body);toast(body?"Registro salvo":"Registro apagado");return true}
+    try{await persist(iso,next,delta);toast(change.valor?"Registro salvo":"Registro apagado");return true}
     catch(e){
       if(had)S.days.set(iso,had);else S.days.delete(iso);
       if(e&&e.code==="invalid_argument"){S.readOnly=true;toast("Sem permissão para salvar")}
@@ -1014,11 +1029,10 @@ input.in{height:48px}
              fotos:d?d.cur.slice():(prev.fotos||[])};
     if(has(m.antes))m.antesEm=has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null);
     const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
-    const day=S.days.get(iso), ref=Object.assign({},day&&day.refeicoes);
-    if(mealFilled(clean)){clean.atualizadoEm=Date.now();ref[k]=clean}else delete ref[k];
+    const valor=mealFilled(clean)?Object.assign(clean,{atualizadoEm:Date.now()}):null;
     S.fotoDraft=null;
-    const ok=await writeDay(iso,{refeicoes:ref});
-    if(d){const kept=ref[k]&&ref[k].fotos||[];
+    const ok=await writeDay(iso,{tipo:"refeicao",chave:k,valor});
+    if(d){const kept=valor&&valor.fotos||[];
       if(ok)deleteAssets(d.orig.filter(id=>!kept.includes(id)));
       else deleteAssets(d.novos);}
   }
@@ -1056,11 +1070,10 @@ input.in{height:48px}
       case "del-no":$("del-wrap").hidden=false;$("del-confirm").hidden=true;break;
       case "del-yes":{
         const ed=S.editing;
-        if(ed.kind==="hipo")writeDay(ed.iso,{hipos:hiposOf(ed.iso).filter(x=>x.id!==ed.id)});
-        else if(ed.kind==="extra")writeDay(ed.iso,{extras:extrasOf(ed.iso).filter(x=>x.id!==ed.id)});
-        else{const ref=Object.assign({},S.days.get(ed.iso)?.refeicoes);delete ref[ed.k];
-          const d=S.fotoDraft;S.fotoDraft=null;
-          writeDay(ed.iso,{refeicoes:ref}).then(ok=>{if(!d)return;deleteAssets(ok?[...new Set([...d.orig,...d.novos])]:d.novos)})}
+        if(ed.kind==="hipo")writeDay(ed.iso,{tipo:"hipo",chave:ed.id,valor:null});
+        else if(ed.kind==="extra")writeDay(ed.iso,{tipo:"extra",chave:ed.id,valor:null});
+        else{const d=S.fotoDraft;S.fotoDraft=null;
+          writeDay(ed.iso,{tipo:"refeicao",chave:ed.k,valor:null}).then(ok=>{if(!d)return;deleteAssets(ok?[...new Set([...d.orig,...d.novos])]:d.novos)})}
         break}
       case "plano-edit-btn":showPlanoEdit(true);break;
       case "plano-cancel":$("plano-in").value=S.plano;showPlanoEdit(false);break;
