@@ -134,6 +134,9 @@ details.tabela{margin-top:8px} details.tabela summary{cursor:pointer;color:var(-
 .locais .opt span{display:flex;justify-content:space-between;gap:6px;border-radius:12px;width:100%}
 .locais .opt{display:block}
 .locais .opt small{font-weight:400;opacity:.8}
+.chart .curva{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.chart .scan{fill:var(--accent);stroke:var(--surface);stroke-width:2}
+.chart .mk{stroke:var(--hypo);stroke-width:2} .chart .mkt{fill:var(--hypo);font:10px var(--sans)}
 .charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
@@ -584,6 +587,7 @@ input.in{height:48px}
         <span class="top-line"><strong>${esc(x.hora||"--:--")}${x.momento?" · "+esc(x.momento):""}</strong><span class="val">${esc(extraValor(x))}${x.lo||x.hi||!has(x.valor)?"":" <small>mg/dL</small>"}</span></span>
         ${has(x.obs)?`<small>${esc(x.obs)}</small>`:""}${x.criadoPor?`<small>${nomeSpan(x.criadoPor,"Anotado por ")}</small>`:""}</button></li>`).join("")+`</ul>`
       :`<p class="empty-line">Ao acordar, ao deitar, de madrugada ou quando precisar medir fora das refeições.</p>`;
+    h+=sensorDiaCard(iso);
     h+=`<p class="note">Toque numa refeição para anotar. Metas de glicemia, doses de insulina e decisões de tratamento seguem as orientações da equipe médica.</p>`;
     return h;
   }
@@ -875,6 +879,39 @@ input.in{height:48px}
     novos.forEach((p,k)=>m.set(k,p));
     const pts=[...m.values()].sort((a,b)=>a.min-b.min||a.tipo-b.tipo);
     return {min:pts.map(p=>p.min),mg:pts.map(p=>p.mg),tipo:pts.map(p=>p.tipo)};
+  }
+  function pontosSensor(iso){
+    const d=S.sensor.get(iso);if(!d||!(d.min||[]).length)return [];
+    return d.min.map((min,i)=>({min,mg:d.mg[i],tipo:(d.tipo||[])[i]||0}));
+  }
+  const hm=min=>pad(Math.floor(min/60))+":"+pad(min%60);
+  // Curva do dia: leituras automáticas como linha (quebrada onde falta mais de 45 min), escaneamentos como pontos.
+  function curvaDia(pts,iso){
+    const W=340,H=160,L=34,R=6,T=16,B=22,pw=W-L-R,ph=H-T-B;
+    const vs=pts.map(p=>p.mg), lo=Math.max(0,Math.floor((Math.min(...vs)-10)/50)*50), hi=Math.max(lo+100,Math.ceil((Math.max(...vs)+10)/50)*50), step=hi-lo>250?100:50;
+    const x=m=>L+m/1440*pw, y=v=>T+ph-(v-lo)/(hi-lo)*ph;
+    let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Glicose do sensor ao longo do dia">`;
+    for(let v=lo;v<=hi;v+=step)s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
+    [0,6,12,18,24].forEach(h=>s+=`<text class="axis" x="${x(h*60)}" y="${H-6}" text-anchor="${h===0?"start":h===24?"end":"middle"}">${h}h</text>`);
+    hiposOf(iso).forEach(h=>{const m=/^(\d{1,2}):(\d{2})/.exec(h.hora||"");if(!m)return;const mx=x(+m[1]*60+ +m[2]);
+      s+=`<line class="mk" x1="${mx}" x2="${mx}" y1="${T}" y2="${T+ph}" stroke-dasharray="3 3"/><text class="mkt" x="${mx}" y="${T-4}" text-anchor="middle">hipo</text>`});
+    const auto=pts.filter(p=>p.tipo===0);let dpath="";
+    auto.forEach((p,i)=>{dpath+=(i&&p.min-auto[i-1].min<=45?"L":"M")+x(p.min).toFixed(1)+" "+y(p.mg).toFixed(1)});
+    if(dpath)s+=`<path class="curva" d="${dpath}"/>`;
+    pts.filter(p=>p.tipo===1).forEach(p=>s+=`<circle class="scan" cx="${x(p.min)}" cy="${y(p.mg)}" r="4"/>`);
+    // área de toque: uma faixa por leitura, até a metade do caminho para a vizinha
+    pts.forEach((p,i)=>{const a=i?(p.min+pts[i-1].min)/2:0,b=i<pts.length-1?(p.min+pts[i+1].min)/2:1440;
+      s+=`<rect class="hit" x="${x(a)}" y="${T}" width="${Math.max(1,x(b)-x(a))}" height="${ph}" data-tip="${hm(p.min)} · ${p.mg} mg/dL${p.tipo===1?" (escaneamento)":""}"/>`});
+    return s+`</svg>`;
+  }
+  function sensorDiaCard(iso){
+    const pts=pontosSensor(iso);if(!pts.length)return "";
+    const vs=pts.map(p=>p.mg);
+    return `<section class="card" style="margin-top:12px"><div class="dayhead"><strong>Sensor</strong><span class="unit num">${pts.length} ${pts.length===1?"leitura":"leituras"}</span></div>
+      <div class="daystrip" style="grid-template-columns:repeat(3,1fr);margin:0 0 8px">
+        <div><b>${fmt(avg(vs))}</b><small>média</small></div><div><b>${fmt(Math.min(...vs))}</b><small>menor</small></div><div><b>${fmt(Math.max(...vs))}</b><small>maior</small></div></div>
+      ${curvaDia(pts,iso)}
+      <p class="note" style="margin-top:4px">Linha: leituras automáticas. Pontos: escaneamentos. Toque na curva para ver o horário e o valor.</p></section>`;
   }
   function sensorCard(){
     const I=S.imp, ro=S.readOnly||S.mode==="offline"||S.mode==="loading", dias=[...S.sensor.keys()].filter(k=>(S.sensor.get(k).min||[]).length).sort();
