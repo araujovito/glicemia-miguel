@@ -122,6 +122,9 @@ svg.chart{width:100%;height:auto;display:block}
 .chart .lbl{fill:var(--muted);font:11px var(--sans)}
 .chart .val{fill:var(--ink);font:10px var(--mono)}
 .chart .ba{fill:var(--accent)} .chart .bd{fill:var(--after)}
+.chart .hit{fill:transparent;cursor:pointer}
+.chart .hit:hover+.mark,.chart .mark.on{opacity:.75}
+.charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
@@ -596,9 +599,10 @@ input.in{height:48px}
     for(let v=0;v<=top;v+=step)s+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${L-6}" y="${y(v)+4}" text-anchor="end">${v}</text>`;
     rows.forEach((r,i)=>{
       const cx=L+gw*i+gw/2;
-      [[r.a,"ba",-bw-1],[r.d,"bd",1]].forEach(([v,c,off])=>{
+      [[r.a,"ba",-bw-1,"antes",r.na],[r.d,"bd",1,"2h depois",r.nd]].forEach(([v,c,off,lab,n])=>{
         if(v==null)return;
-        s+=`<rect class="${c}" x="${cx+off}" y="${y(v)}" width="${bw}" height="${Math.max(0,y(0)-y(v))}" rx="3"/><text class="val" x="${cx+off+bw/2}" y="${y(v)-4}" text-anchor="middle">${Math.round(v)}</text>`;
+        const tip=`${r.x.n} · ${lab}\nMédia ${fmt(v)} mg/dL (${n} ${n===1?"medição":"medições"})`;
+        s+=`<rect class="hit" x="${cx+off-2}" y="${T}" width="${bw+4}" height="${ph}" data-tip="${esc(tip)}"/><rect class="${c} mark" x="${cx+off}" y="${y(v)}" width="${bw}" height="${Math.max(0,y(0)-y(v))}" rx="3" pointer-events="none"/><text class="val" x="${cx+off+bw/2}" y="${y(v)-4}" text-anchor="middle">${Math.round(v)}</text>`;
       });
       s+=`<text class="lbl" x="${cx}" y="${H-10}" text-anchor="middle">${r.x.s}</text>`;
     });
@@ -1233,13 +1237,26 @@ input.in{height:48px}
     return S.downloads;
   }
 
+  /* ---------- dica dos gráficos ---------- */
+  // Qualquer elemento de gráfico com data-tip mostra a dica ao passar o mouse ou tocar (no celular não existe hover).
+  function showTip(el,x,y){
+    let t=$("charttip");if(!t){t=document.createElement("div");t.id="charttip";t.className="charttip";t.setAttribute("role","status");document.body.appendChild(t)}
+    t.textContent=el.dataset.tip;t.hidden=false;
+    const r=t.getBoundingClientRect(), W=document.documentElement.clientWidth;
+    t.style.left=Math.max(8,Math.min(W-r.width-8,x-r.width/2))+"px";t.style.top=Math.max(8,y-r.height-14)+"px";
+  }
+  function hideTip(){const t=$("charttip");if(t)t.hidden=true}
+  document.addEventListener("pointermove",e=>{const el=e.target.closest&&e.target.closest("[data-tip]");if(el&&e.pointerType==="mouse")showTip(el,e.clientX,e.clientY);else if(e.pointerType==="mouse")hideTip()});
+  document.addEventListener("pointerdown",e=>{const el=e.target.closest&&e.target.closest("[data-tip]");if(el)showTip(el,e.clientX,e.clientY);else hideTip()});
+  window.addEventListener("scroll",hideTip,{passive:true});
+
   /* ---------- eventos ---------- */
   document.addEventListener("click",async e=>{
     const t=e.target.closest("button");if(!t)return;
     if(t.id==="lb-close"){closeLightbox();return}
     if(t.dataset.foto){openLightbox(t.dataset.foto);return}
     if(t.dataset.rmfoto){removeFotoDraft(t.dataset.rmfoto);return}
-    if(t.dataset.tab){S.tab=t.dataset.tab;S.copyText=null;render();window.scrollTo(0,0);return}
+    if(t.dataset.tab){hideTip();S.tab=t.dataset.tab;S.copyText=null;render();window.scrollTo(0,0);return}
     if(t.dataset.meal){openEditor(S.date,t.dataset.meal);return}
     if(t.dataset.hipo){openHipo(S.date,t.dataset.hipo);return}
     if(t.dataset.extra){openExtra(S.date,t.dataset.extra);return}
