@@ -29,6 +29,12 @@
     return Number.isFinite(value)?value:null;
   }
 
+  function reminderDue(iso,meal){
+    if(!meal)return null;
+    const start=meal.refeicaoHora?isoTime(iso,meal.refeicaoHora):(+meal.antesEm||null);
+    return start?start+2*3600e3:null;
+  }
+
   function recordChanged(current,baseline){
     return (+((current&&current.atualizadoEm)||0))>(+(baseline||0));
   }
@@ -77,5 +83,5 @@
     return {min:a.map(x=>x.min),mg:a.map(x=>x.mg),tipo:a.map(x=>x.tipo)};
   }
 
-  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor};
+  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor};
 });

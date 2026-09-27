@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -554,9 +554,9 @@ input.in{height:48px}
     const d=new Date();const h=d.getHours()+d.getMinutes()/60;
     const m=MEALS.find(x=>h>=x.from&&h<x.to);return m?m.k:null;
   }
-  function afterStatus(m){
-    if(!m||!has(m.antes)||has(m.depois)||!m.antesEm)return null;
-    const due=m.antesEm+2*3600e3, now=Date.now();
+  function afterStatus(iso,m){
+    if(!m||!has(m.antes)||has(m.depois)||(!m.antesEm&&!m.refeicaoHora))return null;
+    const due=reminderDue(iso,m), now=Date.now();if(!due)return null;
     if(now<due)return {cls:"wait",txt:"2h às "+hhmm(due)};
     if(now-due<3*3600e3)return {cls:"go",txt:"Medir 2h agora"};
     return null;
@@ -621,7 +621,7 @@ input.in{height:48px}
     }
     h+=`<ul class="meals">`;
     MEALS.forEach((x,i)=>{
-      const m=ms[i], filled=mealFilled(m), st=afterStatus(m), isNow=x.k===nowK&&!filled;
+      const m=ms[i], filled=mealFilled(m), st=afterStatus(S.date,m), isNow=x.k===nowK&&!filled;
       let hint="";
       if(st)hint=`<span class="chip ${st.cls}">${st.txt}</span>`;
       else if(isNow)hint=`<span class="chip now">Agora</span>`;
@@ -1418,7 +1418,7 @@ input.in{height:48px}
     if(S.editing.kind==="hipo"){renderHipoSheet(root);return}
     if(S.editing.kind==="extra"){renderExtraSheet(root);return}
     const {iso,k}=S.editing, x=MEALS.find(m=>m.k===k), m=mealOf(iso,k)||{};
-    const due=m.antesEm&&has(m.antes)?`Medir por volta das ${hhmm(m.antesEm+2*3600e3)}.`:"Duas horas após começar a refeição.";
+    const dueAt=reminderDue(iso,m),due=dueAt?`Medir por volta das ${hhmm(dueAt)}.`:"Duas horas após começar a refeição.";
     const ro=S.readOnly||S.mode==="offline";
     root.innerHTML=`<div class="scrim" id="scrim"><form class="sheet" id="form" role="dialog" aria-modal="true" aria-labelledby="sheet-title" novalidate>
       <header><div><h3 id="sheet-title">${x.n}</h3><p>${esc(longDate(iso))}</p>${autoriaLinha(m)}</div><button type="button" class="iconbtn" id="close" aria-label="Fechar">×</button></header>

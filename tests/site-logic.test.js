@@ -27,6 +27,17 @@ test("horário explícito vira instante local do dia correto",()=>{
   assert.equal(d.getHours(),8);assert.equal(d.getMinutes(),15);
 });
 
+test("lembrete de duas horas usa o início da refeição",()=>{
+  const due=L.reminderDue("2026-09-27",{refeicaoHora:"12:00",antesEm:L.isoTime("2026-09-27","11:30")});
+  const d=new Date(due);
+  assert.equal(d.getHours(),14);assert.equal(d.getMinutes(),0);
+});
+
+test("lembrete antigo continua usando a medição anterior como alternativa",()=>{
+  const before=L.isoTime("2026-09-27","11:30");
+  assert.equal(L.reminderDue("2026-09-27",{antesEm:before}),before+2*3600e3);
+});
+
 test("edição concorrente é detectada pela versão do registro",()=>{
   assert.equal(L.recordChanged({atualizadoEm:20},10),true);
   assert.equal(L.recordChanged({atualizadoEm:10},10),false);
