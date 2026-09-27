@@ -4,6 +4,10 @@
 {
   "name": "diario-glicemia",
   "compatibility_date": "2026-09-27",
+  // Endereço público do site: https://diario-glicemia.bana-walker.workers.dev
+  "workers_dev": true,
+  // Sem sites de preview por branch: só a main vai para o ar.
+  "preview_urls": false,
   "assets": {
     "directory": "./site"
   }
