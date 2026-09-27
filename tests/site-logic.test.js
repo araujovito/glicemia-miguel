@@ -87,6 +87,14 @@ test("cobertura do sensor inclui dias inteiros sem leituras",()=>{
   assert.equal(L.sensorCoverage(15*96,14),100);
 });
 
+test("valida datas reais e a estrutura dos dias de backup",()=>{
+  assert.equal(L.validIsoDate("2026-02-28"),true);
+  assert.equal(L.validIsoDate("2026-02-30"),false);
+  assert.equal(L.validBackupDay({atualizadoEm:1,refeicoes:{cafe:{antes:100,tags:["Doente"],fotos:[]}},hipos:{},extras:{}}),true);
+  assert.equal(L.validBackupDay({refeicoes:{cafe:{antes:"cem"}}}),false);
+  assert.equal(L.validBackupDay({refeicoes:{cafe:{tags:"Doente"}}}),false);
+});
+
 test("leituras do sensor são unidas sem duplicar",()=>{
   const a={min:[60,75],mg:[100,110],tipo:[0,0]};
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);

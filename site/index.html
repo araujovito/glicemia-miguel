@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,validIsoDate,validBackupDay,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -1115,16 +1115,19 @@ input.in{height:48px}
     if(c.versao!==1)throw "Esta cópia foi feita por uma versão mais nova do site. Atualize a página e tente de novo.";
     const dias={},fotos={};
     // O arquivo vem de fora: só entram chaves de data válidas, dias em forma de objeto e fotos em data URL de imagem.
-    Object.entries(c.dias).forEach(([iso,d])=>{if(/^\d{4}-\d{2}-\d{2}$/.test(iso)&&d&&typeof d==="object"&&!Array.isArray(d))dias[iso]=d});
+    for(const [iso,d] of Object.entries(c.dias)){
+      if(!validIsoDate(iso)||!validBackupDay(d))throw COPIA_INVALIDA;
+      dias[iso]=d;
+    }
     Object.entries(c.fotos||{}).forEach(([id,u])=>{if(typeof u==="string"&&/^data:image\/(jpeg|png|webp);base64,/.test(u))fotos[id]=u});
     const sensor={};
-    Object.entries(c.sensor&&typeof c.sensor==="object"?c.sensor:{}).forEach(([iso,d])=>{
-      if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)||!d||!Array.isArray(d.min)||!Array.isArray(d.mg)||d.min.length!==d.mg.length)return;
+    for(const [iso,d] of Object.entries(c.sensor&&typeof c.sensor==="object"?c.sensor:{})){
+      if(!validIsoDate(iso)||!d||!Array.isArray(d.min)||!Array.isArray(d.mg)||d.min.length!==d.mg.length)throw COPIA_INVALIDA;
       const num=a=>Array.isArray(a)&&a.every(v=>typeof v==="number"&&isFinite(v));
-      if(!num(d.min)||!num(d.mg)||(d.tipo&&!num(d.tipo)))return;
+      if(!num(d.min)||!num(d.mg)||(d.tipo&&(!num(d.tipo)||d.tipo.length!==d.min.length))||d.min.some(v=>v<0||v>=1440)||d.mg.some(v=>v<0))throw COPIA_INVALIDA;
       const m=new Map();d.min.forEach((min,i)=>{const tipo=d.tipo?d.tipo[i]:0;m.set(min*10+tipo,{min,mg:d.mg[i],tipo})});
       sensor[iso]=m;
-    });
+    }
     return {exportadoEm:c.exportadoEm,nome:typeof c.nome==="string"?c.nome:"",plano:typeof c.plano==="string"?c.plano:"",dias,fotos,sensor};
   }
   function planejarRestauracao(c){

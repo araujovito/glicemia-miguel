@@ -86,6 +86,27 @@
     return Math.min(100,Math.max(0,readings/(days*expectedPerDay)*100));
   }
 
+  function validIsoDate(iso){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(iso||""))return false;
+    const [y,m,d]=iso.split("-").map(Number),date=new Date(y,m-1,d);
+    return date.getFullYear()===y&&date.getMonth()===m-1&&date.getDate()===d;
+  }
+
+  function validBackupDay(day){
+    if(!day||typeof day!=="object"||Array.isArray(day))return false;
+    const records=value=>(Array.isArray(value)?value:Object.values(value||{})).filter(Boolean);
+    const finite=value=>value==null||value===""||(typeof value==="number"&&Number.isFinite(value)&&value>=0);
+    const text=value=>value==null||typeof value==="string";
+    const textList=value=>value==null||(Array.isArray(value)&&value.length<=100&&value.every(x=>typeof x==="string"));
+    const common=record=>record&&typeof record==="object"&&!Array.isArray(record)&&finite(record.criadoEm)&&finite(record.atualizadoEm);
+    const meals=records(day.refeicoes).every(m=>common(m)&&[m.antes,m.depois,m.insulina,m.carbo,m.antesEm].every(finite)
+      &&[m.antesHora,m.refeicaoHora,m.depoisHora,m.local,m.comeu,m.obs].every(text)&&textList(m.tags)&&textList(m.fotos));
+    const hipos=records(day.hipos).every(h=>common(h)&&[h.valor,h.nova].every(finite)
+      &&[h.id,h.hora,h.situacao,h.tratamento,h.novaHora,h.obs].every(text)&&textList(h.sintomas));
+    const extras=records(day.extras).every(x=>common(x)&&finite(x.valor)&&[x.id,x.hora,x.momento,x.obs].every(text));
+    return meals&&hipos&&extras&&finite(day.atualizadoEm);
+  }
+
   function mergeSensor(atual,novos){
     const m=new Map();
     if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+((atual.tipo||[])[i]||0),{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
@@ -95,5 +116,5 @@
     return {min:a.map(x=>x.min),mg:a.map(x=>x.mg),tipo:a.map(x=>x.tipo)};
   }
 
-  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,mergeSensor};
+  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,reminderDue,recordChanged,optimisticCommit,mergeDayRecords,withClearedFields,sensorCoverage,validIsoDate,validBackupDay,mergeSensor};
 });
