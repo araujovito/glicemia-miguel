@@ -127,6 +127,9 @@ svg.chart{width:100%;height:auto;display:block}
 .chart .wa{stroke:var(--accent)} .chart .wd{stroke:var(--after)}
 .chart .med{stroke:var(--surface);stroke-width:2}
 details.tabela{margin-top:8px} details.tabela summary{cursor:pointer;color:var(--accent);font-weight:700;padding:6px 0}
+.favs{display:flex;flex-wrap:wrap;gap:6px}
+.fav{border:1px dashed var(--accent);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:.88rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+.fav small{color:var(--muted);margin-left:4px}
 .charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
@@ -369,6 +372,32 @@ input.in{height:48px}
       <div class="hint">Glicemia antes → 2 h depois, em mg/dL.${lista.length>MAX?` Mostrando as ${MAX} mais parecidas.`:""}</div>`;
   }
   let outrasTimer;
+
+  /* Pratos frequentes: o que já foi escrito 2 vezes ou mais nesta refeição (café, lanche...), para preencher com um toque.
+     Não há lista para manter: sai do próprio histórico. */
+  function frequentes(k,iso0){
+    const grupos=new Map();
+    [...S.days.keys()].sort().forEach(iso=>{
+      if(iso===iso0)return;
+      const m=mealOf(iso,k);if(!m||!has(m.comeu))return;
+      const chave=m.comeu.trim().toLowerCase().replace(/\s+/g," ");
+      const g=grupos.get(chave)||{n:0};
+      g.n++;g.texto=m.comeu.trim();g.carbo=has(m.carbo)?m.carbo:null;g.ultimo=iso;   // guarda a grafia e o carboidrato da vez mais recente
+      grupos.set(chave,g);
+    });
+    return [...grupos.values()].filter(g=>g.n>=2).sort((a,b)=>b.n-a.n||b.ultimo.localeCompare(a.ultimo)).slice(0,5);
+  }
+  function favsHtml(k,iso){
+    if(S.readOnly||S.mode==="offline")return "";
+    S.favs=frequentes(k,iso);if(!S.favs.length)return "";
+    return `<div class="favs" aria-label="Pratos frequentes">${S.favs.map((g,i)=>`<button type="button" class="fav" data-fav="${i}" title="${esc(g.texto)}">${esc(g.texto)}<small>${g.n}×</small></button>`).join("")}</div>`;
+  }
+  function usarFav(i){
+    const g=S.favs&&S.favs[i];if(!g)return;
+    $("f-comeu").value=g.texto;
+    if(g.carbo!=null&&!$("f-carbo").value)$("f-carbo").value=String(g.carbo).replace(".",",");
+    renderOutras();checkCarbo();$("f-comeu").focus();
+  }
   function carboTxt(m){return has(m&&m.carbo)?fmt(+m.carbo,1)+" g de carboidrato":""}
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
@@ -1030,7 +1059,7 @@ input.in{height:48px}
         <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
         <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
       </div>
-      <div class="field"><label for="f-comeu">O que comeu e bebeu</label><textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
+      <div class="field"><label for="f-comeu">O que comeu e bebeu</label>${favsHtml(k,iso)}<textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
       <div class="field"><label for="f-carbo">Carboidratos <span class="hint">(opcional, se vocês contam)</span></label><div class="suffix" style="max-width:50%"><input id="f-carbo" inputmode="decimal" autocomplete="off" value="${has(m.carbo)?esc(String(m.carbo).replace(".",",")):""}" placeholder="—"><span>g</span></div><div id="w-carbo"></div></div>
       <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
         <div class="fotos" id="fotos"></div>
@@ -1327,6 +1356,7 @@ input.in{height:48px}
     if(t.id==="lb-close"){closeLightbox();return}
     if(t.dataset.foto){openLightbox(t.dataset.foto);return}
     if(t.dataset.rmfoto){removeFotoDraft(t.dataset.rmfoto);return}
+    if(t.dataset.fav!==undefined){usarFav(+t.dataset.fav);return}
     if(t.dataset.tab){hideTip();S.tab=t.dataset.tab;S.copyText=null;render();window.scrollTo(0,0);return}
     if(t.dataset.meal){openEditor(S.date,t.dataset.meal);return}
     if(t.dataset.hipo){openHipo(S.date,t.dataset.hipo);return}
