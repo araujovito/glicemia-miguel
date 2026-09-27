@@ -1,0 +1,10 @@
+// Publicação no Cloudflare (Workers com arquivos estáticos).
+// Só a pasta site/ vai para o ar: migrações, testes e planilhas ficam de fora.
+// O deploy roda sozinho a cada push na main (integração do Cloudflare com o GitHub).
+{
+  "name": "glicemia-miguel",
+  "compatibility_date": "2026-09-27",
+  "assets": {
+    "directory": "./site"
+  }
+}
