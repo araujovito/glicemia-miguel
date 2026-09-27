@@ -31,6 +31,13 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - O **registro de hipoglicemia** guarda horário, valor (ou "LO"), situação, sintomas, o que foi feito e a nova medição. Ele mostra o plano que a família anotou da equipe médica.
 - As **medições extras** (ao acordar, ao deitar, de madrugada…) não entram nas médias das refeições.
 
+**Vários cuidadores no mesmo diário**
+- Mãe, pai, avó e escola registram no mesmo lugar, cada um no próprio celular, e veem as anotações dos outros na hora.
+- Cada registro mostra quem anotou e quem alterou por último ("Anotado por Ana · alterado por João às 14:32").
+- Quem recebeu o link só para ver já abre o site com um aviso, e o botão Salvar fica desabilitado.
+
+**Das outras vezes:** enquanto você escreve o que a criança comeu, aparecem as refeições anteriores com os mesmos alimentos, com a glicemia antes → 2 h, a variação, a insulina e as fotos.
+
 **Histórico:** um cartão por dia, com filtro por etiqueta.
 
 **Resumo para a consulta**
@@ -38,6 +45,13 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - Gráfico de barras por refeição.
 - As médias das refeições que tiveram cada etiqueta, além das tabelas de hipoglicemias e de medições extras.
 - Exporta o **relatório em PDF** (jsPDF), a **planilha em CSV** (com as mesmas colunas da planilha Excel) e um resumo em texto para copiar.
+
+**Cópia de segurança**
+- Baixa um arquivo `.json` com todos os registros, o nome, o plano da equipe médica e, se quiser, as fotos.
+- Restaura a partir desse arquivo sem apagar nada mais novo:
+  - dias que faltam são adicionados;
+  - num dia que existe nos dois lados, fica a versão alterada por último;
+  - antes de gravar, o site mostra o que vai acontecer.
 
 ### Onde os dados ficam
 
@@ -47,14 +61,33 @@ O site foi feito para rodar como **Artifact do Claude** (claude.ai). Ele usa as 
 |---|---|
 | `db` | Um registro por dia (`dias/AAAA-MM-DD`), o nome da criança (`config/crianca`) e o plano da equipe médica (`config/plano`) |
 | `assets` | Fotos dos pratos |
-| `downloads` | Baixar o PDF e o CSV |
+| `downloads` | Baixar o PDF, o CSV e a cópia de segurança |
+| `user` (escopo `profile`) | Saber quem está registrando, mostrar o nome de quem anotou e saber se a pessoa pode editar |
 
 Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), e não dá para enviar fotos nem baixar arquivos.
 
 ### Como usar
 
 - **Testar no computador:** abra `site/index.html` no navegador. Ele roda em modo local.
-- **Usar de verdade:** publique o `index.html` como Artifact no claude.ai com as capacidades `db`, `assets` e `downloads`. Depois é só abrir o link no celular.
+- **Usar de verdade:** publique o `index.html` como Artifact no claude.ai com as capacidades `db`, `assets`, `downloads` e `user`. Depois é só abrir o link no celular.
+- **Compartilhar com a família:** compartilhe o Artifact pelo claude.ai.
+  - Quem vai registrar precisa de permissão para **editar**.
+  - Quem só acompanha, como o médico, pode receber o link só para ver.
+  - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
+
+### Formato de um dia
+
+```
+dias/2026-09-27
+  refeicoes: { cafe: {antes, insulina, depois, comeu, obs, tags, fotos, criadoPor, atualizadoPor, criadoEm, atualizadoEm}, lanche: null, ... }
+  hipos:     { <id>: {hora, valor | lo, situacao, sintomas, tratamento, nova, novaHora, obs, criadoPor, ...} }
+  extras:    { <id>: {hora, valor | lo | hi, momento, obs, criadoPor, ...} }
+  data, atualizadoEm
+```
+
+- `criadoPor` e `atualizadoPor` guardam o id opaco da plataforma, nunca o nome. O nome é buscado na hora de mostrar.
+- Um registro apagado vira `null`.
+- Dias gravados antes da versão com vários cuidadores guardam `hipos` e `extras` como listas. O site lê os dois formatos e converte o dia na primeira alteração.
 
 ## Planilha (Excel)
 
@@ -83,9 +116,13 @@ O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 - **Fotos sem localização.** A foto é recomprimida no próprio aparelho antes de ser salva. Isso diminui o arquivo e remove os metadados, inclusive a localização GPS.
 - **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
 - **Mesmas colunas no CSV e no Excel.** Um CSV exportado do site pode ser colado na planilha sem precisar reorganizar as colunas.
+- **Cada gravação envia só o que mudou.** O site usa `update`, que mescla, em vez de regravar o dia inteiro. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. O banco não tem transações, então duas pessoas editando *a mesma* refeição ao mesmo tempo continuam no "último a salvar vence".
+- **"Das outras vezes" só mostra, não julga.** A busca compara palavras: ignora acentos e palavras como "com" e "copo", e trata plurais simples. As refeições vêm ordenadas pela semelhança. Não há cor de "bom" ou "ruim", pela mesma regra de não definir metas.
+- **A cópia de segurança fica com a família.** Os registros moram num único Artifact, ligado a uma conta. A cópia existe para que o histórico não dependa dessa conta.
 
 ## Privacidade
 
 - Este repositório é **privado** e contém só o código e os modelos vazios. **Nenhum dado de saúde fica aqui.** Os registros ficam no armazenamento do Artifact ou no navegador.
 - Não coloque aqui exportações (CSV ou PDF), fotos, capturas de tela com registros nem planilhas preenchidas. O `.gitignore` bloqueia esses formatos. As únicas planilhas aceitas são os dois modelos vazios da pasta `planilha/`.
 - Para usar a planilha, faça uma cópia **fora** da pasta do projeto e preencha a cópia. Assim o modelo versionado continua vazio.
+- O arquivo da cópia de segurança (`copia-glicemia-*.json`) tem os dados de saúde da criança. Guarde num lugar privado. O `.gitignore` bloqueia esse nome de arquivo, mas o mais seguro é nunca salvar a cópia dentro da pasta do repositório.
