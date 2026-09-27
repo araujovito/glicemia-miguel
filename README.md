@@ -24,7 +24,9 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 
 **Registrar o dia**
 - São 6 refeições: café da manhã, lanche, almoço, café da tarde, janta e ceia.
-- Para cada refeição dá para anotar a glicemia antes (mg/dL), a insulina aplicada (unidades), o que comeu e bebeu, a glicemia 2 h depois e observações.
+- Para cada refeição dá para anotar a glicemia antes (mg/dL), a insulina aplicada (unidades), o local da aplicação, o que comeu e bebeu, os carboidratos em gramas (opcional), a glicemia 2 h depois e observações.
+- **Pratos frequentes:** o que já foi escrito 2 vezes ou mais naquela refeição aparece como botão, e um toque preenche o prato e os carboidratos.
+- **Local da aplicação:** 8 locais (barriga, braço, coxa e nádega, dos dois lados). Cada um mostra quando foi usado pela última vez, para ajudar no rodízio. O site não indica o próximo local.
 - Depois de anotar a glicemia antes, aparece o lembrete "2h às HH:MM".
 - Há **etiquetas** de um toque: atividade física, festa/doce, comeu fora, na escola, doente, não comeu tudo, comeu mais que o normal, dormiu mal, nervoso.
 - Cada refeição aceita até 3 **fotos do prato**.
@@ -40,17 +42,26 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 
 **Histórico:** um cartão por dia, com filtro por etiqueta.
 
+**Sensor de glicose (FreeStyle Libre)**
+- Importa o CSV exportado do LibreView (Histórico de glicose → Baixar dados de glicose). O site entende datas dia/mês ou mês/dia, relógio de 24 ou 12 horas, mg/dL ou mmol/L, e vírgula ou ponto e vírgula como separador. Antes de gravar, mostra uma prévia.
+- Importar de novo junta as leituras sem duplicar e sem apagar nada.
+- A tela de cada dia ganha a curva do sensor, com os escaneamentos e as hipoglicemias registradas marcados.
+
 **Resumo para a consulta**
-- Médias, mínimas e máximas por refeição, a variação média (2 h − antes) e a insulina média.
-- Gráfico de barras por refeição.
+- Médias, mínimas e máximas por refeição, a variação média (2 h − antes), a insulina média e os carboidratos médios.
+- Gráfico de barras por refeição. Tocar numa barra mostra o valor e em quantas medições ele se apoia.
+- **Perfil por refeição:** como os valores se espalham em cada refeição (menor e maior valor, metade central e mediana), com o coeficiente de variação e o desvio padrão. É a adaptação do AGP para medições de ponta de dedo.
+- **Perfil do sensor (AGP):** com as leituras do sensor, todos os dias do período sobrepostos hora a hora, com mediana e faixas de 25–75% e 5–95%, como no relatório AGP que a endocrinologia usa.
+- **Locais de aplicação:** quantas vezes cada local foi usado no período e quando foi a última.
 - As médias das refeições que tiveram cada etiqueta, além das tabelas de hipoglicemias e de medições extras.
-- Exporta o **relatório em PDF** (jsPDF), a **planilha em CSV** (com as mesmas colunas da planilha Excel) e um resumo em texto para copiar.
+- Exporta o **relatório em PDF** (jsPDF, com os perfis e o AGP), a **planilha em CSV** e um resumo em texto para copiar. O PDF também pode ser gerado só com as leituras do sensor.
 
 **Cópia de segurança**
-- Baixa um arquivo `.json` com todos os registros, o nome, o plano da equipe médica e, se quiser, as fotos.
+- Baixa um arquivo `.json` com todos os registros, as leituras do sensor, o nome, o plano da equipe médica e, se quiser, as fotos.
 - Restaura a partir desse arquivo sem apagar nada mais novo:
   - dias que faltam são adicionados;
   - num dia que existe nos dois lados, fica a versão alterada por último;
+  - as leituras do sensor são juntadas, como na importação;
   - antes de gravar, o site mostra o que vai acontecer.
 
 ### Onde os dados ficam
@@ -80,7 +91,7 @@ Se essas capacidades não estiverem disponíveis, o site entra em **modo local**
 
 ```
 dias/2026-09-27
-  refeicoes: { cafe: {antes, insulina, depois, comeu, obs, tags, fotos, criadoPor, atualizadoPor, criadoEm, atualizadoEm}, lanche: null, ... }
+  refeicoes: { cafe: {antes, insulina, local, carbo, depois, comeu, obs, tags, fotos, criadoPor, atualizadoPor, criadoEm, atualizadoEm}, lanche: null, ... }
   hipos:     { <id>: {hora, valor | lo, situacao, sintomas, tratamento, nova, novaHora, obs, criadoPor, ...} }
   extras:    { <id>: {hora, valor | lo | hi, momento, obs, criadoPor, ...} }
   data, atualizadoEm
@@ -88,6 +99,19 @@ dias/2026-09-27
 
 - `criadoPor` e `atualizadoPor` guardam o id opaco da plataforma, nunca o nome. O nome é buscado na hora de mostrar.
 - Um registro apagado vira `null`.
+- `local` é uma chave fixa (`barriga-e`, `coxa-d`...), e não o texto mostrado. `carbo` fica em gramas.
+
+As leituras do sensor ficam em outra coleção, um documento por dia:
+
+```
+sensor/2026-09-27
+  min:  [0, 15, 30, ...]     minuto do dia
+  mg:   [118, 121, 125, ...] mg/dL (mmol/L é convertido na importação)
+  tipo: [0, 0, 1, ...]       0 = leitura automática, 1 = escaneamento
+  data, fonte: "LibreView", atualizadoEm, importadoPor
+```
+
+São três listas paralelas, e não uma lista de pares, porque o banco não guarda listas dentro de listas.
 - Dias gravados antes da versão com vários cuidadores guardam `hipos` e `extras` como listas. O site lê os dois formatos e converte o dia na primeira alteração.
 
 ## Planilha (Excel)
@@ -116,9 +140,12 @@ O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 - **Não sugere nada de tratamento.** O site registra e resume, mas não calcula dose, não define meta e não classifica um valor como "bom" ou "ruim". O plano para hipoglicemia é texto livre, escrito pela família conforme a orientação da equipe médica.
 - **Fotos sem localização.** A foto é recomprimida no próprio aparelho antes de ser salva. Isso diminui o arquivo e remove os metadados, inclusive a localização GPS.
 - **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
-- **Mesmas colunas no CSV e no Excel.** Um CSV exportado do site pode ser colado na planilha sem precisar reorganizar as colunas.
+- **O CSV começa com as colunas da planilha Excel.** As 7 primeiras colunas são as mesmas da planilha. As colunas que vieram depois (etiquetas, carboidratos, local da aplicação) ficam no fim, para que colar na planilha continue funcionando.
 - **Cada gravação envia só o que mudou.** O site usa `update`, que mescla, em vez de regravar o dia inteiro. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. O banco não tem transações, então duas pessoas editando *a mesma* refeição ao mesmo tempo continuam no "último a salvar vence".
 - **"Das outras vezes" só mostra, não julga.** A busca compara palavras: ignora acentos e palavras como "com" e "copo", e trata plurais simples. As refeições vêm ordenadas pela semelhança. Não há cor de "bom" ou "ruim", pela mesma regra de não definir metas.
+- **Perfis sem metas.** O perfil por refeição e o AGP mostram mediana, faixas de percentis, coeficiente de variação e desvio padrão, sem faixa-alvo, tempo no alvo (TIR) ou GMI. Os dois primeiros dependem de metas que só a equipe médica define. O GMI estimaria a hemoglobina glicada, que o projeto decidiu não estimar. As faixas de 25–75% só aparecem com 4 medições ou mais (5 por hora no AGP), e buracos nos dados interrompem as linhas em vez de inventar valores.
+- **Carboidratos e locais são só registro.** O site não relaciona carboidrato com insulina (razão insulina:carboidrato, dose) e não indica o próximo local de aplicação.
+- **Sensor pelo arquivo, não por integração.** O LibreView não tem uma API aberta para famílias, e o CSV é a exportação oficial. O leitor localiza as colunas pela posição em relação a "tipo de registro", e não pelo nome de cada uma, para não depender da tradução.
 - **A cópia de segurança fica com a família.** Os registros moram num único Artifact, ligado a uma conta. A cópia existe para que o histórico não dependa dessa conta.
 
 ## Privacidade
