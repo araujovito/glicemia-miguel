@@ -456,7 +456,7 @@ input.in{height:48px}
     const b=$("banner");
     if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador. Abra pelo link do Claude para salvar na nuvem."}
     else if(S.mode==="offline"){b.hidden=false;b.textContent="Sem conexão com o armazenamento. Recarregue a página antes de registrar."}
-    else if(S.readOnly){b.hidden=false;b.textContent="Você pode ver os registros, mas não tem permissão para alterar. Peça acesso de edição a quem compartilhou."}
+    else if(S.readOnly){b.hidden=false;b.textContent="Você não tem permissão para registrar neste diário. Peça a quem compartilhou o acesso de edição."}
     else b.hidden=true;
     document.querySelectorAll(".tabs button").forEach(x=>x.setAttribute("aria-current",x.dataset.tab===S.tab?"page":"false"));
   }

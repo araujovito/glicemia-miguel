@@ -34,7 +34,7 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 **Vários cuidadores no mesmo diário**
 - Mãe, pai, avó e escola registram no mesmo lugar, cada um no próprio celular, e veem as anotações dos outros na hora.
 - Cada registro mostra quem anotou e quem alterou por último ("Anotado por Ana · alterado por João às 14:32").
-- Quem recebeu o link só para ver já abre o site com um aviso, e o botão Salvar fica desabilitado.
+- Quem não tem permissão para editar vê um aviso logo ao abrir, e o botão Salvar fica desabilitado.
 
 **Das outras vezes:** enquanto você escreve o que a criança comeu, aparecem as refeições anteriores com os mesmos alimentos, com a glicemia antes → 2 h, a variação, a insulina e as fotos.
 
@@ -72,8 +72,9 @@ Se essas capacidades não estiverem disponíveis, o site entra em **modo local**
 - **Usar de verdade:** publique o `index.html` como Artifact no claude.ai com as capacidades `db`, `assets`, `downloads` e `user`. Depois é só abrir o link no celular.
 - **Compartilhar com a família:** compartilhe o Artifact pelo claude.ai.
   - Quem vai registrar precisa de permissão para **editar**.
-  - Quem só acompanha, como o médico, pode receber o link só para ver.
   - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
+  - O banco é publicado com a regra `read: "interact", write: "interact"`. Por ela, só quem pode participar (Contributor ou acima) lê os registros. Quem recebe o link só para ver abre um diário vazio. Isso é proposital, porque são dados de saúde de uma criança.
+  - Para a equipe médica, mande o **relatório em PDF** em vez do link.
 
 ### Formato de um dia
 
