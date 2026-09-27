@@ -164,6 +164,12 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .extra-card small{color:var(--muted);font-size:.85rem}
 .por{color:var(--muted);font-weight:400}
 .autoria{font-size:.82rem}
+.outras{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:6px}
+.outra{border:1px solid var(--line);border-radius:12px;padding:8px 10px;background:var(--bg);display:grid;gap:2px}
+.outra .top-line{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.outra .vals{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.outra .va{color:var(--accent);font-weight:700} .outra .vd{color:var(--after);font-weight:700}
+.outra small{color:var(--muted);font-size:.84rem}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
 /* fotos */
@@ -318,6 +324,36 @@ input.in{height:48px}
       if(!n){e.hidden=true;return}
       e.textContent=e.dataset.pre+n+e.dataset.pos;e.hidden=false});
   }
+  /* "Das outras vezes": refeições anteriores com os mesmos alimentos. Só mostra o que aconteceu, sem julgar. */
+  const PARADAS=new Set("com sem de da do das dos e ou um uma uns umas no na nos nas em ao aos para por pouco pouca muito muita meio meia mais menos copo copos prato pratos pedaco pedacos colher colheres fatia fatias xicara xicaras unidade unidades".split(" "));
+  function palavras(t){
+    // Plural simples: pães/feijões → pão/feijão (antes de tirar os acentos), ovos → ovo.
+    return new Set(String(t||"").toLowerCase().replace(/(ães|ões|ãos)(?![a-zà-ú])/g,"ão").normalize("NFD").replace(/[\u0300-\u036f]/g,"").split(/[^a-z]+/)
+      .filter(w=>w.length>=3&&!PARADAS.has(w)).map(w=>w.length>3&&w.endsWith("s")?w.slice(0,-1):w));
+  }
+  function parecidas(texto,iso0,k0){
+    const q=palavras(texto);if(!q.size)return [];
+    const out=[];
+    S.days.forEach((d,iso)=>MEALS.forEach(x=>{
+      if(iso===iso0&&x.k===k0)return;
+      const m=mealOf(iso,x.k);if(!m||!has(m.comeu)||!(has(m.antes)||has(m.depois)))return;
+      const w=palavras(m.comeu);let n=0;q.forEach(p=>{if(w.has(p))n++});
+      if(!n||n/q.size<0.5)return;                       // pelo menos metade dos alimentos digitados
+      out.push({iso,x,m,score:n/(q.size+w.size-n)});   // semelhança de Jaccard: prefere a refeição mais parecida no todo
+    }));
+    return out.sort((a,b)=>b.score-a.score||b.iso.localeCompare(a.iso));
+  }
+  function renderOutras(){
+    const box=$("outras");if(!box||!S.editing||S.editing.kind!=="meal")return;
+    const lista=parecidas($("f-comeu").value,S.editing.iso,S.editing.k), MAX=4;
+    if(!lista.length){box.innerHTML="";return}
+    box.innerHTML=`<span style="font-weight:700">Das outras vezes</span> <span class="hint">(${lista.length===1?"1 refeição parecida":lista.length+" refeições parecidas"})</span>
+      <ul class="outras">${lista.slice(0,MAX).map(({iso,x,m})=>`<li class="outra">
+        <span class="top-line"><strong>${esc(shortDate(iso))} · ${x.n}</strong><span class="vals"><span class="va">${has(m.antes)?fmt(+m.antes):"–"}</span> → <span class="vd">${has(m.depois)?fmt(+m.depois):"–"}</span>${has(m.antes)&&has(m.depois)?` <small>(${m.depois-m.antes>0?"+":""}${fmt(m.depois-m.antes)})</small>`:""}</span></span>
+        <small>${esc(m.comeu)}${has(m.insulina)?` · ${esc(fmt(+m.insulina,1))} un`:""}${(m.tags||[]).length?` · ${esc(m.tags.join(", "))}`:""}</small>${thumbs(m.fotos)}</li>`).join("")}</ul>
+      <div class="hint">Glicemia antes → 2 h depois, em mg/dL.${lista.length>MAX?` Mostrando as ${MAX} mais parecidas.`:""}</div>`;
+  }
+  let outrasTimer;
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
   const $ = id=>document.getElementById(id);
@@ -804,7 +840,7 @@ input.in{height:48px}
         <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
         <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
       </div>
-      <div class="field"><label for="f-comeu">O que comeu e bebeu</label><textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea></div>
+      <div class="field"><label for="f-comeu">O que comeu e bebeu</label><textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
       <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
         <div class="fotos" id="fotos"></div>
         <div class="hint" id="fotos-hint">Fotografe só o prato, evite o rosto ${S.nome?"de "+esc(S.nome):"da criança"}. A localização da foto é removida antes de salvar.</div></div>
@@ -817,7 +853,7 @@ input.in{height:48px}
       ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
     </form></div>`;
     ["antes","depois"].forEach(f=>checkGlu(f));checkIns();
-    renderFotos();fillNames();
+    renderFotos();renderOutras();fillNames();
   }
   function checkGlu(f){
     const el=$("f-"+f),w=$("w-"+f);if(!el||!w)return true;
@@ -1140,6 +1176,7 @@ input.in{height:48px}
     if(id==="rep-nome")return;
     if(id==="x-valor"||id==="x-hora"){checkExtra(false);return}
     if(id==="h-valor"||id==="h-nova"||id==="h-hora"){checkHipo(false);return}
+    if(id==="f-comeu"){clearTimeout(outrasTimer);outrasTimer=setTimeout(renderOutras,250);return}
     if(id==="f-antes")checkGlu("antes");else if(id==="f-depois")checkGlu("depois");else if(id==="f-ins")checkIns();
   });
   document.addEventListener("change",async e=>{
