@@ -41,6 +41,9 @@ test("lembrete antigo continua usando a medição anterior como alternativa",()=
 test("edição concorrente é detectada pela versão do registro",()=>{
   assert.equal(L.recordChanged({atualizadoEm:20},10),true);
   assert.equal(L.recordChanged({atualizadoEm:10},10),false);
+  assert.equal(L.recordChanged(null,10),true);
+  assert.equal(L.recordChanged(null,0),false);
+  assert.equal(L.recordChanged({atualizadoEm:5},10),true);
 });
 
 test("salvamento otimista mantém a alteração quando funciona",async()=>{

@@ -504,7 +504,7 @@ input.in{height:48px}
     const form=$("form")||$("hform")||$("xform");if(!form||$("conflict"))return;
     const box=document.createElement("div");box.id="conflict";box.className="conflict";box.setAttribute("role","alert");
     box.innerHTML='<strong>Este registro mudou em outro aparelho.</strong><span>Carregue a versão mais recente para conferir, ou salve a sua versão sabendo que ela substituirá a alteração mais nova.</span><div class="actions"><button type="button" class="btn" id="conflict-reload">Carregar versão recente</button><button type="button" class="btn primary" id="conflict-force">Salvar minha versão</button></div>';
-    const actions=form.querySelector(".actions:last-of-type");form.insertBefore(box,actions);
+    const actions=[...form.children].find(el=>el.classList.contains("actions"));form.insertBefore(box,actions||null);
   }
 
   function saveNome(nome){
@@ -530,7 +530,7 @@ input.in{height:48px}
       db.collection("dias").onSnapshot(snap=>{
         const m=new Map();
         snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});
-        if(S.editing&&!S.editing.force&&recordChanged(editingRecord(m,S.editing),S.editing.baseUpdated)){S.editing.conflict=true;showConflict()}
+        if(S.editing&&!S.editing.saving&&!S.editing.force&&recordChanged(editingRecord(m,S.editing),S.editing.baseUpdated)){S.editing.conflict=true;showConflict()}
         S.days=m;
         if(!S.editing)render(); else renderView();
       },err=>{

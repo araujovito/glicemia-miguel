@@ -36,7 +36,7 @@
   }
 
   function recordChanged(current,baseline){
-    return (+((current&&current.atualizadoEm)||0))>(+(baseline||0));
+    return (+((current&&current.atualizadoEm)||0))!== (+(baseline||0));
   }
 
   async function optimisticCommit(apply,rollback,save){
