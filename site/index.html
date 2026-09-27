@@ -789,6 +789,7 @@ input.in{height:48px}
     const per=R.first?`${fmtDM.format(parseIso(R.first))} a ${fmtDM.format(parseIso(R.last))}`:"sem registros";
     let t=`Resumo da glicemia (${per})\nDias com registro: ${R.isos.length}\nMédia geral: antes ${fmt(avg(R.allA))} mg/dL · 2h depois ${fmt(avg(R.allD))} mg/dL\n`;
     if(R.cv!=null)t+=`Variabilidade: coeficiente de variação ${fmt(R.cv)}% · desvio padrão ${fmt(R.dp)} mg/dL\n`;
+    if(R.sensor)t+=`Sensor: ${R.sensor.dias.length} dias · média ${fmt(R.sensor.media)} mg/dL · coeficiente de variação ${R.sensor.cv==null?"–":fmt(R.sensor.cv)+"%"} · ${fmt(Math.min(100,R.sensor.cobertura))}% do tempo com leitura\n`;
     t+=`\n`;
     R.rows.forEach(r=>{if(!r.na&&!r.nd)return;
       t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un${r.nc?` · carboidratos em média ${fmt(r.carbo)} g`:""}\n`;
@@ -1202,8 +1203,37 @@ input.in{height:48px}
     const nt=Math.min(days.length,5);doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.setFont("helvetica","normal");
     for(let t=0;t<nt;t++){const i=nt>1?Math.round(t*(days.length-1)/(nt-1)):0;const [,mm,dd]=days[i].split("-");doc.text(dd+"/"+mm,px(i),top+ph+4,{align:"center"})}
 
-    // hipoglicemias
     y=top+ph+14;
+
+    // AGP do sensor
+    const Sn=R.sensor, horasOk=Sn?Sn.horas.map((h,i)=>h&&h.n>=MIN_HORA?Object.assign({i},h):null).filter(Boolean):[];
+    if(horasOk.length){
+      if(y>205){doc.addPage();y=20}
+      doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Perfil do sensor (AGP)",M,y);
+      doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(...C.muted);
+      doc.text(`${Sn.dias.length} dias de sensor (${dmy(Sn.dias[0])} a ${dmy(Sn.dias[Sn.dias.length-1])}) · média ${n0(Sn.media)} mg/dL · coeficiente de variação ${Sn.cv==null?"-":n0(Sn.cv)+"%"} · ${n0(Math.min(100,Sn.cobertura))}% do tempo com leitura · ${Sn.n} leituras`,M,y+5);
+      const ax=M+7,aw=CW-7,ah=48,at=y+10;
+      const lo=Math.max(0,Math.floor((Math.min(...horasOk.map(h=>h.p5))-10)/50)*50),hi=Math.max(lo+100,Math.ceil((Math.max(...horasOk.map(h=>h.p95))+10)/50)*50);
+      axis(ax,at,aw,ah,lo,hi);
+      const hx=i=>ax+(i+.5)/24*aw, hy=v=>at+ah-(v-lo)/(hi-lo)*ah;
+      [0,6,12,18,24].forEach(h=>{doc.setFontSize(6.5);doc.setTextColor(...C.muted);doc.text(h+"h",ax+h/24*aw,at+ah+4,{align:"center"})});
+      const trechos=[];horasOk.forEach(h=>{const t=trechos[trechos.length-1];if(t&&t[t.length-1].i===h.i-1)t.push(h);else trechos.push([h])});
+      // polígono preenchido a partir de pontos absolutos (doc.lines usa deslocamentos relativos)
+      const poli=(pts,cor)=>{doc.setFillColor(...cor);doc.lines(pts.slice(1).map((p,k)=>[p[0]-pts[k][0],p[1]-pts[k][1]]),pts[0][0],pts[0][1],[1,1],"F",true)};
+      const F90=C.accent.map(c=>Math.round(255-(255-c)*.16)), F50=C.accent.map(c=>Math.round(255-(255-c)*.38));
+      trechos.forEach(t=>{
+        const faixa=(a,b)=>t.length>1?[...t.map(h=>[hx(h.i),hy(h[a])]),...t.slice().reverse().map(h=>[hx(h.i),hy(h[b])])]
+          :[[hx(t[0].i)-1,hy(t[0][a])],[hx(t[0].i)+1,hy(t[0][a])],[hx(t[0].i)+1,hy(t[0][b])],[hx(t[0].i)-1,hy(t[0][b])]];
+        poli(faixa("p95","p5"),F90);poli(faixa("p75","p25"),F50);
+        doc.setDrawColor(...C.accent);doc.setLineWidth(0.6);
+        for(let k=1;k<t.length;k++)doc.line(hx(t[k-1].i),hy(t[k-1].med),hx(t[k].i),hy(t[k].med));
+      });
+      const lx=W-M-62;doc.setFontSize(7);doc.setTextColor(...C.muted);
+      [[C.accent,"Mediana"],[F50,"25-75%"],[F90,"5-95%"]].forEach(([c,l],k)=>{doc.setFillColor(...c);doc.rect(lx+k*21,y-2.6,2.5,2.5,"F");doc.text(l,lx+k*21+3.5,y-0.3)});
+      y=at+ah+13;
+    }
+
+    // hipoglicemias
     if(R.hipos.length){
       const HY=[176,37,74];
       doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...HY);doc.text("Episódios de hipoglicemia ("+R.hipos.length+")",M,y);
