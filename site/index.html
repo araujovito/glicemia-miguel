@@ -643,9 +643,10 @@ input.in{height:48px}
     const tags=ETIQUETAS.map(t=>{const a=[],d=[];let n=0;
       isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!m||!(m.tags||[]).includes(t))return;n++;if(has(m.antes))a.push(+m.antes);if(has(m.depois))d.push(+m.depois)}));
       return {t,n,a:avg(a),d:avg(d)}}).filter(r=>r.n>0);
+    const locais=LOCAIS.map(l=>{let n=0,ultimo=null;isos.forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(m&&m.local===l.k){n++;if(!ultimo||iso>ultimo)ultimo=iso}}));return {l,n,ultimo}});
     const todas=[...allA,...allD], dp=desvio(todas), media=avg(todas);
     const cv=dp!=null&&media?dp/media*100:null;
-    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length};
+    return {isos,rows,allA,allD,first,last,start,end,hipos,extras,tags,dp,cv,nTodas:todas.length,locais,nLocais:locais.reduce((s,x)=>s+x.n,0)};
   }
 
   function chart(rows){
@@ -736,6 +737,14 @@ input.in{height:48px}
     });
     h+=`</tbody></table></div><p class="note">Variação média = 2h depois − antes, só nas refeições com as duas medições. Medições = antes/2h.</p></section>`;
     h+=perfilCard(R);
+    if(R.nLocais){
+      const mx=Math.max(...R.locais.map(x=>x.n));
+      h+=`<section class="card" style="margin-top:12px"><strong>Locais de aplicação</strong>
+        <p class="note" style="margin-top:4px">${R.nLocais} ${R.nLocais===1?"aplicação com local anotado":"aplicações com local anotado"} no período.</p>
+        <div class="tablewrap" style="margin-top:6px"><table><thead><tr><th>Local</th><th class="num">Vezes</th><th style="width:40%"></th><th class="num">Última</th></tr></thead><tbody>
+        ${R.locais.map(x=>`<tr><td style="white-space:nowrap">${x.l.n}</td><td class="num">${x.n}</td><td><span style="display:block;height:8px;border-radius:0 4px 4px 0;background:var(--accent);opacity:.55;width:${x.n?Math.max(4,x.n/mx*100):0}%"></span></td><td class="num">${x.ultimo?esc(fmtDM.format(parseIso(x.ultimo)).slice(0,5)):"–"}</td></tr>`).join("")}
+        </tbody></table></div></section>`;
+    }
     if(R.tags.length){
       h+=`<section class="card" style="margin-top:12px"><strong>Refeições com etiqueta</strong><div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Etiqueta</th><th class="num">Refeições</th><th class="num">Antes<br>média</th><th class="num">2h<br>média</th></tr></thead><tbody>`+
         R.tags.map(r=>`<tr><td>${esc(r.t)}</td><td class="num">${r.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${fmt(r.d)}</td></tr>`).join("")+
@@ -767,6 +776,7 @@ input.in{height:48px}
       [[r.da,"antes"],[r.dd,"2h"]].forEach(([d,l])=>{if(d&&d.n>=MIN_CAIXA)t+=`  ${l}: mediana ${fmt(d.med)}, metade central ${fmt(d.p25)}–${fmt(d.p75)}, de ${fmt(d.min)} a ${fmt(d.max)}\n`});});
     if(R.tags.length){t+=`\nRefeições com etiqueta:\n`;R.tags.forEach(r=>{t+=`- ${r.t}: ${r.n} refeições · antes ${fmt(r.a)} · 2h ${fmt(r.d)}\n`})}
     if(R.extras.length){t+=`\nOutras medições: ${R.extras.length}\n`;R.extras.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${extraValor(x)}${x.lo||x.hi||!has(x.valor)?"":" mg/dL"}${x.momento?" · "+x.momento:""}${has(x.obs)?" · "+x.obs:""}\n`})}
+    if(R.nLocais)t+=`\nLocais de aplicação (${R.nLocais}): ${R.locais.filter(x=>x.n).map(x=>`${x.l.n} ${x.n}×`).join(", ")}\n`;
     t+=`\nHipoglicemias registradas: ${R.hipos.length}\n`;
     R.hipos.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${hipoValor(x)}${x.lo||!has(x.valor)?"":" mg/dL"}${x.situacao?" · "+x.situacao:""}${has(x.tratamento)?" · feito: "+x.tratamento:""}${has(x.nova)?" · nova medição "+fmt(+x.nova)+(x.novaHora?" às "+x.novaHora:""):""}\n`});
     return t.trim();
@@ -775,15 +785,15 @@ input.in{height:48px}
   function csv(){
     const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
     const n=(v,d)=>has(v)?Number(v).toLocaleString("pt-BR",{maximumFractionDigits:d||0,useGrouping:false}):"";
-    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas","Carboidratos (g)"].join(";")];
+    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas","Carboidratos (g)","Local da aplicação"].join(";")];
     daysWithData().reverse().forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", "),n(m.carbo,1)].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", "),n(m.carbo,1),localNome(m.local)].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>extrasOf(iso).forEach(x=>{
-      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"","",""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"","","",""].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>hiposOf(iso).forEach(x=>{
       const det=[x.situacao&&"Situação: "+x.situacao,(x.sintomas||[]).length&&"Sintomas: "+x.sintomas.join(", "),has(x.tratamento)&&"Feito: "+x.tratamento,
         has(x.nova)&&"Nova medição: "+n(x.nova)+" mg/dL"+(x.novaHora?" às "+x.novaHora:""),has(x.obs)&&x.obs].filter(Boolean).join(" | ");
-      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,"",""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,"","",""].map(q).join(";"));}));
     return "﻿"+lines.join("\r\n");
   }
 
@@ -1027,6 +1037,8 @@ input.in{height:48px}
       doc.text(`Coeficiente de variação ${R.cv==null?"-":n0(R.cv)+"%"} · desvio padrão ${R.dp==null?"-":n0(R.dp)+" mg/dL"} (${R.nTodas} medições antes e 2h). 25-75% só com ${MIN_CAIXA} medições ou mais.`,M,y-6);
       y+=2;
     }
+    if(R.nLocais)section("Locais de aplicação ("+R.nLocais+" com local anotado)",{head:[["Local","Vezes no período","Última vez"]],
+      body:R.locais.map(x=>[x.l.n,String(x.n),x.ultimo?shortDate(x.ultimo):"-"]),columnStyles:{1:{halign:"center"},2:{halign:"center"}}});
     if(R.tags.length)section("Refeições com etiqueta",{head:[["Etiqueta","Refeições","Antes média","2h depois média"]],
       body:R.tags.map(r=>[r.t,String(r.n),n0(r.a),n0(r.d)]),columnStyles:{1:{halign:"center"},2:{halign:"center"},3:{halign:"center"}}});
     if(R.extras.length)section("Outras medições (fora das refeições; não entram nas médias)",{head:[["Data","Hora","Glicemia","Momento","Observações"]],
@@ -1039,7 +1051,7 @@ input.in{height:48px}
     const body=[],dayIdx=[];
     R.isos.slice().reverse().forEach((iso,di)=>{let first=true;
       MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",has(m.carbo)?n1(+m.carbo):"-",m.comeu||"",[(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
+        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",has(m.carbo)?n1(+m.carbo):"-",m.comeu||"",[m.local&&"Aplicação: "+localNome(m.local),(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
         dayIdx.push(di);first=false})});
     table(doc,{startY:y+3,margin:{left:M,right:M,bottom:18},theme:"plain",
       head:[["Data","Refeição","Antes","Insul.","2h dep.","Carbo (g)","O que comeu e bebeu","Observações"]],body,
