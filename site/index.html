@@ -210,24 +210,6 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .restore-plan{margin:8px 0 0;padding-left:18px;font-size:.9rem;display:grid;gap:4px}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
-/* fotos */
-.fotos{display:flex;gap:8px;flex-wrap:wrap}
-.foto{position:relative;width:84px;height:84px;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2)}
-.foto-open{all:unset;display:block;width:100%;height:100%;cursor:zoom-in}
-.foto-open:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
-.foto img,.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
-.foto-rm{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:0;background:rgba(0,0,0,.62);color:#fff;font-size:1.05rem;line-height:1;display:grid;place-items:center}
-.foto.loading{display:grid;place-items:center;color:var(--muted);font-size:.75rem;text-align:center}
-.foto-add{position:relative;width:84px;height:84px;border-radius:12px;border:1.5px dashed var(--accent);color:var(--accent);background:var(--bg);font-weight:700;font-size:.82rem;display:grid;place-items:center;text-align:center;cursor:pointer}
-.foto-add:focus-within{outline:3px solid var(--accent);outline-offset:2px}
-.foto-add input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
-.thumbs{display:flex;gap:6px;margin-top:6px}
-.thumbs button{width:52px;height:52px;padding:0;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:zoom-in}
-img.broken{object-fit:contain;opacity:.4}
-.lightbox{position:fixed;inset:0;z-index:30;background:rgba(5,12,14,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:16px;padding-block:calc(16px + env(safe-area-inset-top,0px)) calc(16px + env(safe-area-inset-bottom,0px))}
-.lightbox img{max-width:100%;max-height:78vh;border-radius:12px;background:#222}
-.lightbox .btn{min-width:140px}
-
 /* navegação inferior */
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
 .tabs div{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr)}
@@ -332,7 +314,7 @@ input.in{height:48px}
   const LOCAL_KEY = "diario-glicemia-v1";
   const DEMO=new URLSearchParams(location.search).get("demo")==="1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
-              period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
+              period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, user:null, uid:null, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
               backup:{busy:false,msg:null}, pending:0, isOwner:false, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
   const queues = {};
 
@@ -352,10 +334,7 @@ input.in{height:48px}
   function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
   function fmt(n,dec=0){if(n==null||!isFinite(n))return "–";return n.toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:dec})}
   function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
-  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.local)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
-  const MAX_FOTOS=3;
-  function fotoUrl(id){return S.fotoUrls[id]||("/_blob/"+id)}
-  function thumbs(ids){return ids&&ids.length?`<span class="thumbs">${ids.map(id=>`<button type="button" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato" loading="lazy"></button>`).join("")}</span>`:""}
+  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.local)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0)}
   // Hipoglicemias e medições extras ficam num mapa {id: registro}. Dias gravados antes disso usam lista; os dois formatos são lidos.
   function listOf(v){return (Array.isArray(v)?v:Object.values(v||{})).filter(Boolean)}
   function hiposOf(iso){const d=S.days.get(iso);return listOf(d&&d.hipos).sort((a,b)=>String(a.hora).localeCompare(String(b.hora)))}
@@ -401,7 +380,7 @@ input.in{height:48px}
     box.innerHTML=`<span style="font-weight:700">Das outras vezes</span> <span class="hint">(${lista.length===1?"1 refeição parecida":lista.length+" refeições parecidas"})</span>
       <ul class="outras">${lista.slice(0,MAX).map(({iso,x,m})=>`<li class="outra">
         <span class="top-line"><strong>${esc(shortDate(iso))} · ${x.n}</strong><span class="vals"><span class="va">${has(m.antes)?fmt(+m.antes):"–"}</span> → <span class="vd">${has(m.depois)?fmt(+m.depois):"–"}</span>${has(m.antes)&&has(m.depois)?` <small>(${m.depois-m.antes>0?"+":""}${fmt(m.depois-m.antes)})</small>`:""}</span></span>
-        <small>${esc(m.comeu)}${has(m.carbo)?` · ${esc(carboTxt(m))}`:""}${has(m.insulina)?` · ${esc(fmt(+m.insulina,1))} un`:""}${(m.tags||[]).length?` · ${esc(m.tags.join(", "))}`:""}</small>${thumbs(m.fotos)}</li>`).join("")}</ul>
+        <small>${esc(m.comeu)}${has(m.carbo)?` · ${esc(carboTxt(m))}`:""}${has(m.insulina)?` · ${esc(fmt(+m.insulina,1))} un`:""}${(m.tags||[]).length?` · ${esc(m.tags.join(", "))}`:""}</small></li>`).join("")}</ul>
       <div class="hint">Glicemia antes → 2 h depois, em mg/dL.${lista.length>MAX?` Mostrando as ${MAX} mais parecidas.`:""}</div>`;
   }
   let outrasTimer;
@@ -546,7 +525,6 @@ input.in{height:48px}
       db.doc("config/plano").onSnapshot(d=>{S.plano=d.exists&&d.data().texto||"";if(!S.editing)renderView()},()=>{});
       db.collection("sensor").onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});S.sensor=m;if(!S.editing)renderView()},()=>{});
     }).catch(fallback);
-    window.claude.use("assets").then(a=>{S.assets=a;if(S.fotoDraft)renderFotos()}).catch(()=>{});
     window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
     window.claude.use("user").then(u=>{
       if(!u)return;S.user=u;
@@ -639,7 +617,7 @@ input.in{height:48px}
       h+=`<li><button class="meal${isNow?" now":""}" data-meal="${x.k}">
         <span class="meal-name">${x.n}</span>
         <span class="meal-hint">${hint}${food}</span>
-        ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.local?[localNome(m.local)]:[]),...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
+        ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.local?[localNome(m.local)]:[]),...(m.tags||[])];
           return it.length||m.criadoPor?`<span class="meal-tags">${esc(it.join(" · "))}${nomeSpan(m.criadoPor,it.length?" · por ":"por ")}</span>`:""})():""}
         ${filled?`<span class="readings">${rd("a",m.antes,m.antesHora?"antes "+m.antesHora:"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,m.depoisHora?"2h "+m.depoisHora:"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
       </button></li>`;
@@ -660,7 +638,7 @@ input.in{height:48px}
     let rows="";
     MEALS.forEach(x=>{
       const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      rows+=`<tr><td>${x.n}${m.refeicaoHora?`<span class="tagline">${esc(m.refeicaoHora)}</span>`:""}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}${m.antesHora?`<span class="tagline">${esc(m.antesHora)}</span>`:""}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}${m.depoisHora?`<span class="tagline">${esc(m.depoisHora)}</span>`:""}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${m.local?`<span class="tagline">Aplicação: ${esc(localNome(m.local))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
+      rows+=`<tr><td>${x.n}${m.refeicaoHora?`<span class="tagline">${esc(m.refeicaoHora)}</span>`:""}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}${m.antesHora?`<span class="tagline">${esc(m.antesHora)}</span>`:""}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}${m.depoisHora?`<span class="tagline">${esc(m.depoisHora)}</span>`:""}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${m.local?`<span class="tagline">Aplicação: ${esc(localNome(m.local))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}</td></tr>`;
     });
     let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
     const xs=extrasOf(iso);
@@ -1382,7 +1360,7 @@ input.in{height:48px}
     const body=[],dayIdx=[];
     R.isos.slice().reverse().forEach((iso,di)=>{let first=true;
       MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",has(m.carbo)?n1(+m.carbo):"-",m.comeu||"",[m.local&&"Aplicação: "+localNome(m.local),(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
+        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",has(m.carbo)?n1(+m.carbo):"-",m.comeu||"",[m.local&&"Aplicação: "+localNome(m.local),(m.tags||[]).join(", "),m.obs].filter(Boolean).join(" · ")]);
         dayIdx.push(di);first=false})});
     table(doc,{startY:y+3,margin:{left:M,right:M,bottom:18},theme:"plain",
       head:[["Data","Refeição","Antes","Insul.","2h dep.","Carbo (g)","O que comeu e bebeu","Observações"]],body,
@@ -1430,9 +1408,6 @@ input.in{height:48px}
         <div class="locais" role="radiogroup" aria-label="Local da aplicação">${(()=>{const u=ultimosUsos(iso,k);return LOCAIS.map(l=>`<label class="opt"><input type="radio" name="f-local" value="${l.k}" ${m.local===l.k?"checked":""}><span>${l.n}<small>${haQuanto(u[l.k])}</small></span></label>`).join("")})()}</div></div>
       <div class="field"><label for="f-comeu">O que comeu e bebeu</label>${favsHtml(k,iso)}<textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
       <div class="field"><label for="f-carbo">Carboidratos <span class="hint">(opcional, se vocês contam)</span></label><div class="suffix" style="max-width:50%"><input id="f-carbo" inputmode="decimal" autocomplete="off" value="${has(m.carbo)?esc(String(m.carbo).replace(".",",")):""}" placeholder="—"><span>g</span></div><div id="w-carbo"></div></div>
-      <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
-        <div class="fotos" id="fotos"></div>
-        <div class="hint" id="fotos-hint">Fotografe só o prato, evite o rosto ${S.nome?"de "+esc(S.nome):"da criança"}. A localização da foto é removida antes de salvar.</div></div>
       <div class="field"><span style="font-weight:700">Etiquetas <span class="hint">(toque para marcar)</span></span><div class="opts">
         ${ETIQUETAS.map(t=>`<label class="opt"><input type="checkbox" name="f-tag" value="${esc(t)}" ${(m.tags||[]).includes(t)?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
       <div class="group-label">Depois</div>
@@ -1444,7 +1419,7 @@ input.in{height:48px}
       ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
     </form></div>`;
     ["antes","depois"].forEach(f=>checkGlu(f));checkIns();checkCarbo();
-    renderFotos();renderOutras();fillNames();
+    renderOutras();fillNames();
     setTimeout(()=>$("f-antes")&&$("f-antes").focus(),0);
   }
   function checkGlu(f){
@@ -1588,71 +1563,8 @@ input.in{height:48px}
   }
 
   function openExtra(iso,id){const x=(id&&extrasOf(iso).find(e=>e.id===id))||{};S.editing={kind:"extra",iso,id:id||null,baseUpdated:+x.atualizadoEm||0};renderSheet()}
-  function renderFotos(){
-    const box=$("fotos"), d=S.fotoDraft;if(!box||!d)return;
-    const ro=S.readOnly||S.mode==="offline", canAdd=!!S.assets&&!ro;
-    box.innerHTML=d.cur.map(id=>`<div class="foto"><button type="button" class="foto-open" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato"></button>${canAdd?`<button type="button" class="foto-rm" data-rmfoto="${esc(id)}" aria-label="Remover foto">×</button>`:""}</div>`).join("")
-      +(d.busy?`<div class="foto loading">Enviando…</div>`:"")
-      +(canAdd&&!d.busy&&d.cur.length<MAX_FOTOS?`<label class="foto-add">+ Foto<input type="file" id="f-foto" accept="image/*" aria-label="Adicionar foto do prato"></label>`:"");
-    if(!canAdd&&!d.cur.length)box.innerHTML=`<span class="hint">Fotos não disponíveis nesta tela. Abra pelo link do Claude, com permissão de edição.</span>`;
-  }
-  function withTimeout(p,ms,code){return Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej({code}),ms))])}
-  async function loadImage(file){
-    if(window.createImageBitmap){try{return await createImageBitmap(file,{imageOrientation:"from-image"})}catch(e){}}
-    const src=URL.createObjectURL(file);
-    return new Promise((res,rej)=>{const img=new Image();img.onload=()=>res(img);img.onerror=()=>rej({code:"decode"});img.src=src})
-      .finally(()=>setTimeout(()=>URL.revokeObjectURL(src),1000));
-  }
-  async function compressImage(file){
-    try{
-      const img=await withTimeout(loadImage(file),20000,"decode");
-      const w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,sc=Math.min(1,1280/Math.max(w,h));
-      const c=document.createElement("canvas");c.width=Math.max(1,Math.round(w*sc));c.height=Math.max(1,Math.round(h*sc));
-      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-      if(img.close)img.close();
-      return await withTimeout(new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej({code:"decode"}),"image/jpeg",0.82)),20000,"decode");
-    }catch(e){throw e&&e.code?e:{code:"decode"}}
-  }
-  async function addFoto(file){
-    const d=S.fotoDraft;if(!d||!S.assets||!file)return;
-    if(d.cur.length>=MAX_FOTOS){toast("Limite de "+MAX_FOTOS+" fotos por refeição");return}
-    d.busy=true;renderFotos();
-    try{
-      const blob=await compressImage(file);
-      const r=await withTimeout(S.assets.upload(blob,{type:"image/jpeg"}),90000,"timeout");
-      if(S.fotoDraft!==d){S.assets.delete(r.id).catch(()=>{});return}
-      S.fotoUrls[r.id]=r.url;d.cur.push(r.id);d.novos.push(r.id);
-    }catch(err){
-      const c=err&&err.code;
-      toast(c==="decode"?"Não foi possível abrir esta foto. Tente outra ou tire uma nova."
-        :c==="too_large"?"Foto grande demais. Tente outra."
-        :c==="quota_or_state"?"O espaço para fotos está cheio."
-        :c==="rate_limited"?"Muitos envios seguidos. Aguarde um pouco e tente de novo."
-        :"Não foi possível enviar a foto. Tente de novo.");
-    }finally{if(S.fotoDraft===d){d.busy=false;renderFotos()}}
-  }
-  function removeFotoDraft(id){
-    const d=S.fotoDraft;if(!d)return;
-    d.cur=d.cur.filter(x=>x!==id);
-    if(d.novos.includes(id)){d.novos=d.novos.filter(x=>x!==id);S.assets&&S.assets.delete(id).catch(()=>{})}
-    renderFotos();
-  }
-  function discardDraft(){
-    const d=S.fotoDraft;S.fotoDraft=null;
-    if(d&&S.assets)d.novos.forEach(id=>S.assets.delete(id).catch(()=>{}));
-  }
-  function deleteAssets(ids){if(S.assets)ids.forEach(id=>S.assets.delete(id).catch(()=>{}))}
-  function openLightbox(id){
-    closeLightbox();
-    const el=document.createElement("div");el.className="lightbox";el.id="lightbox";el.setAttribute("role","dialog");el.setAttribute("aria-label","Foto do prato");
-    el.innerHTML=`<img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato"><button type="button" class="btn" id="lb-close">Fechar</button>`;
-    document.body.appendChild(el);$("lb-close").focus();
-  }
-  function closeLightbox(){const el=$("lightbox");if(el)el.remove()}
-
   function openEditor(iso,k){
     const m=mealOf(iso,k)||{};
-    S.fotoDraft={orig:[...(m.fotos||[])],cur:[...(m.fotos||[])],novos:[],busy:false};
     S.editing={kind:"meal",iso,k,baseUpdated:+m.atualizadoEm||0};renderSheet();
   }
   function openHipo(iso,id){const x=(id&&hiposOf(iso).find(h=>h.id===id))||{};S.editing={kind:"hipo",iso,id:id||null,baseUpdated:+x.atualizadoEm||0};renderSheet()}
@@ -1705,23 +1617,18 @@ input.in{height:48px}
   }
 
   async function submit(){
-    const d=S.fotoDraft;
     if(S.editing.conflict&&!S.editing.force){showConflict();toast("Confira a alteração feita em outro aparelho");return}
-    if(d&&d.busy){toast("Aguarde a foto terminar de enviar");return}
     const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns(),okC=checkCarbo();
     if(!okA||!okD||!okI||!okC){toast("Corrija os campos marcados");return}
     const {iso,k}=S.editing, prev=mealOf(iso,k)||{};
     const antesHora=$("f-antes-hora").value, refeicaoHora=$("f-refeicao-hora").value, depoisHora=$("f-depois-hora").value;
     const m={antes:parseNum($("f-antes").value),antesHora,refeicaoHora,insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),local:(document.querySelector('input[name="f-local"]:checked')||{}).value||"",depois:parseNum($("f-depois").value),depoisHora,
              comeu:$("f-comeu").value.trim(),obs:$("f-obs").value.trim(),
-             tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value),
-             fotos:d?d.cur.slice():(prev.fotos||[])};
+             tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value)};
     if(has(m.antes))m.antesEm=antesHora?isoTime(iso,antesHora):(has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null));
     const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
     const valor=mealFilled(clean)?Object.assign(clean,{criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()},autoria(prev)):null;
-    const ok=await writeDay(iso,{tipo:"refeicao",chave:k,valor});
-    if(d){const kept=valor&&valor.fotos||[];
-      if(ok){S.fotoDraft=null;deleteAssets(d.orig.filter(id=>!kept.includes(id)))}}
+    await writeDay(iso,{tipo:"refeicao",chave:k,valor});
   }
 
   const DL_MSG="Este navegador não permitiu baixar o arquivo. Abra o diário no Chrome ou Safari e tente novamente.";
@@ -1754,9 +1661,6 @@ input.in{height:48px}
   /* ---------- eventos ---------- */
   document.addEventListener("click",async e=>{
     const t=e.target.closest("button");if(!t)return;
-    if(t.id==="lb-close"){closeLightbox();return}
-    if(t.dataset.foto){openLightbox(t.dataset.foto);return}
-    if(t.dataset.rmfoto){removeFotoDraft(t.dataset.rmfoto);return}
     if(t.dataset.fav!==undefined){usarFav(+t.dataset.fav);return}
     if(t.dataset.tab){hideTip();S.tab=t.dataset.tab;S.copyText=null;render();window.scrollTo(0,0);return}
     if(t.dataset.meal){openEditor(S.date,t.dataset.meal);return}
@@ -1768,7 +1672,7 @@ input.in{height:48px}
     if(t.dataset.open){S.date=t.dataset.open;S.tab="dia";render();window.scrollTo(0,0);return}
     if(t.dataset.period!==undefined){S.period=Number(t.dataset.period);S.copyText=null;renderView();return}
     if(t.id==="conflict-reload"){
-      const ed={...S.editing};discardDraft();
+      const ed={...S.editing};
       if(ed.kind==="meal")openEditor(ed.iso,ed.k);else if(ed.kind==="hipo")openHipo(ed.iso,ed.id);else openExtra(ed.iso,ed.id);
       toast("Versão mais recente carregada");return;
     }
@@ -1780,7 +1684,7 @@ input.in{height:48px}
       case "prev":S.date=addDays(S.date,-1);render();break;
       case "next":if(S.date<todayIso()){S.date=addDays(S.date,1);render()}break;
       case "gotoday":S.date=todayIso();render();break;
-      case "close":case "cancel":discardDraft();closeEditor();break;
+      case "close":case "cancel":closeEditor();break;
       case "add-hipo":openHipo(S.date,null);break;
       case "add-extra":openExtra(S.date,null);break;
       case "del":$("del-wrap").hidden=true;$("del-confirm").hidden=false;break;
@@ -1789,8 +1693,7 @@ input.in{height:48px}
         const ed=S.editing;
         if(ed.kind==="hipo")writeDay(ed.iso,{tipo:"hipo",chave:ed.id,valor:null});
         else if(ed.kind==="extra")writeDay(ed.iso,{tipo:"extra",chave:ed.id,valor:null});
-        else{const d=S.fotoDraft;S.fotoDraft=null;
-          writeDay(ed.iso,{tipo:"refeicao",chave:ed.k,valor:null}).then(ok=>{if(!d)return;deleteAssets(ok?[...new Set([...d.orig,...d.novos])]:d.novos)})}
+        else writeDay(ed.iso,{tipo:"refeicao",chave:ed.k,valor:null});
         break}
       case "plano-edit-btn":showPlanoEdit(true);break;
       case "plano-cancel":$("plano-in").value=S.plano;showPlanoEdit(false);break;
@@ -1852,13 +1755,11 @@ input.in{height:48px}
       try{S.backup.plano=planejarRestauracao(lerCopia(await f.text()));S.backup.msg=null}
       catch(err){S.backup.plano=null;S.backup.msg=typeof err==="string"?err:COPIA_INVALIDA}
       renderView();return}
-    if(id==="f-foto"){const f=e.target.files&&e.target.files[0];e.target.value="";addFoto(f);return}
     if(id==="x-lo"||id==="x-hi"){const other=$(id==="x-lo"?"x-hi":"x-lo");if(e.target.checked)other.checked=false;const v=$("x-valor");v.disabled=$("x-lo").checked||$("x-hi").checked;if(v.disabled)v.value="";checkExtra(false);return}
     if(id==="rep-nome"){if(DEMO)return;const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
       try{await saveNome(nome);toast(nome?"Nome salvo":"Nome removido")}catch(err){S.nome=antes;renderTop();toast("Não foi possível salvar o nome")}return}
     if(e.target.id==="h-lo"){const v=$("h-valor");v.disabled=e.target.checked;if(e.target.checked)v.value="";checkHipo(false)}});
-  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("lightbox")){closeLightbox();return}if(S.editing){if(S.editing.saving){toast("Aguarde o salvamento terminar");return}discardDraft();closeEditor()}});
-  document.addEventListener("error",e=>{const t=e.target;if(t&&t.tagName==="IMG"&&t.dataset.foto&&!t.classList.contains("broken")){t.classList.add("broken");t.alt="Foto indisponível"}},true);
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(S.editing){if(S.editing.saving){toast("Aguarde o salvamento terminar");return}closeEditor()}});
   $("datepick").addEventListener("change",e=>{const v=e.target.value;if(v&&v<=todayIso()){S.date=v;render()}});
 
   setInterval(()=>{if(S.tab==="dia"&&!S.editing){if(S.date>todayIso())S.date=todayIso();renderView()}},60000);

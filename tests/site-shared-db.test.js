@@ -40,9 +40,8 @@ const CLAUDE_SIMULADO=`(()=>{
   const user={isOwner:async()=>window.__dono,id:async()=>window.__uid,can:async n=>n==="data.write"?window.__podeEscrever:null,
     me:async()=>({id:window.__uid,name:"",isOwner:window.__dono,canEdit:false,avatarUrl:"",color:"#888",email:null}),
     profiles:async ids=>Object.fromEntries([].concat(ids).map(i=>[i,{id:i,name:i==="u_ana"?"Ana":"João",avatarUrl:"",color:"#888",email:null,isMe:i===window.__uid,guest:false}]))};
-  const assets={upload:async()=>({id:"a1",url:"",sizeBytes:0,contentType:"image/jpeg"}),delete:async()=>{},list:async()=>({assets:[],usage:{}})};
   const downloads={save:async()=>({status:"saved"})};
-  const caps={db,user,assets,downloads};
+  const caps={db,user,downloads};
   window.claude={use:n=>new Promise(r=>setTimeout(()=>r(caps[n]||null),20))};
 })();`;
 
