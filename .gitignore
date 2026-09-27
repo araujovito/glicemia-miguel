@@ -1,10 +1,11 @@
 # Este repositório guarda só código e modelos vazios.
 # Nada com dado de saúde pode entrar aqui: exportações, fotos, planilhas preenchidas.
 
-# Exportações do site (relatório e planilha)
+# Exportações do site (relatório, planilha e cópia de segurança)
 *.csv
 *.pdf
 *.txt
+copia-glicemia-*.json
 
 # Fotos e capturas de tela
 *.jpg
