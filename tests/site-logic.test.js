@@ -47,6 +47,20 @@ test("salvamento otimista restaura o estado quando falha",async()=>{
   assert.equal(value,"antigo");
 });
 
+test("restauração combina registros do mesmo dia sem apagar os atuais",()=>{
+  const atual={data:"2026-09-27",atualizadoEm:200,refeicoes:{almoco:{comeu:"arroz",atualizadoEm:200}},hipos:{},extras:{}};
+  const copia={data:"2026-09-27",atualizadoEm:300,refeicoes:{janta:{comeu:"sopa",atualizadoEm:300}},hipos:{},extras:{}};
+  const result=L.mergeDayRecords(atual,copia);
+  assert.equal(result.refeicoes.almoco.comeu,"arroz");
+  assert.equal(result.refeicoes.janta.comeu,"sopa");
+});
+
+test("restauração conserva a versão mais recente de cada registro",()=>{
+  const atual={atualizadoEm:300,refeicoes:{almoco:{comeu:"atual",atualizadoEm:300}}};
+  const copia={atualizadoEm:200,refeicoes:{almoco:{comeu:"antigo",atualizadoEm:200}}};
+  assert.equal(L.mergeDayRecords(atual,copia).refeicoes.almoco.comeu,"atual");
+});
+
 test("leituras do sensor são unidas sem duplicar",()=>{
   const a={min:[60,75],mg:[100,110],tipo:[0,0]};
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);

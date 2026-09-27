@@ -39,6 +39,35 @@
     catch(error){rollback();throw error}
   }
 
+  function recordMap(value){
+    if(Array.isArray(value)){
+      const out={};value.forEach(item=>{if(item&&item.id)out[item.id]=item});return out;
+    }
+    return Object.assign({},value||{});
+  }
+
+  function mergeRecordMaps(current,incoming){
+    const a=recordMap(current),b=recordMap(incoming),out=Object.assign({},a);
+    Object.entries(b).forEach(([key,value])=>{
+      const old=a[key];
+      if(!old||(+value.atualizadoEm||0)>(+old.atualizadoEm||0))out[key]=value;
+    });
+    return out;
+  }
+
+  function mergeDayRecords(current,incoming){
+    if(!current)return incoming;
+    if(!incoming)return current;
+    const incomingIsNewer=(+incoming.atualizadoEm||0)>(+current.atualizadoEm||0);
+    const out=incomingIsNewer?Object.assign({},current,incoming):Object.assign({},incoming,current);
+    out.data=current.data||incoming.data;
+    out.refeicoes=mergeRecordMaps(current.refeicoes,incoming.refeicoes);
+    out.hipos=mergeRecordMaps(current.hipos,incoming.hipos);
+    out.extras=mergeRecordMaps(current.extras,incoming.extras);
+    out.atualizadoEm=Math.max(+current.atualizadoEm||0,+incoming.atualizadoEm||0);
+    return out;
+  }
+
   function mergeSensor(atual,novos){
     const m=new Map();
     if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+((atual.tipo||[])[i]||0),{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
@@ -48,5 +77,5 @@
     return {min:a.map(x=>x.min),mg:a.map(x=>x.mg),tipo:a.map(x=>x.tipo)};
   }
 
-  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeSensor};
+  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor};
 });

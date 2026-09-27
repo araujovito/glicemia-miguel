@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeDayRecords,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -1103,8 +1103,7 @@ input.in{height:48px}
     }finally{B.busy=false;renderView()}
   }
 
-  // Restauração: junta a cópia com o que já existe, sem apagar nada que seja mais novo.
-  // Dia que só existe na cópia entra; dia que existe nos dois fica com a versão alterada por último (atualizadoEm).
+  // Restauração: junta cada registro da cópia com o que já existe.
   const COPIA_INVALIDA="Este arquivo não é uma cópia de segurança do diário.";
   function lerCopia(texto){
     let c;try{c=JSON.parse(texto)}catch(e){throw COPIA_INVALIDA}
@@ -1128,8 +1127,10 @@ input.in{height:48px}
     const novos=[],trocar=[],manter=[];
     Object.keys(c.dias).sort().forEach(iso=>{
       if(!dayHas(iso))novos.push(iso);
-      else if((+c.dias[iso].atualizadoEm||0)>(+S.days.get(iso).atualizadoEm||0))trocar.push(iso);
-      else manter.push(iso);
+      else {
+        const atual=S.days.get(iso),mesclado=mergeDayRecords(atual,c.dias[iso]);
+        if(JSON.stringify(mesclado)!==JSON.stringify(atual))trocar.push(iso);else manter.push(iso);
+      }
     });
     // Sensor: entra o dia em que a cópia acrescenta alguma leitura (juntar nunca apaga).
     const sensor=Object.keys(c.sensor).sort().filter(iso=>{const a=S.sensor.get(iso);return juntarSensor(a,c.sensor[iso]).min.length>((a&&a.min)||[]).length});
@@ -1141,7 +1142,7 @@ input.in{height:48px}
     return `<div class="confirm"><strong>Cópia${esc(quando)}: ${q(Object.keys(P.c.dias).length)}</strong>
       ${nada?`<span>Nada a restaurar: tudo o que está na cópia já está aqui.</span>`:`<ul class="restore-plan">
         ${P.novos.length?`<li>${q(P.novos.length)} que não ${P.novos.length===1?"existe":"existem"} aqui ${P.novos.length===1?"será adicionado":"serão adicionados"}.</li>`:""}
-        ${P.trocar.length?`<li>${q(P.trocar.length)} ${P.trocar.length===1?"será trocado":"serão trocados"} pela versão da cópia, que foi alterada depois.</li>`:""}
+        ${P.trocar.length?`<li>${q(P.trocar.length)} ${P.trocar.length===1?"receberá":"receberão"} registros da cópia sem apagar as outras anotações.</li>`:""}
         ${P.manter.length?`<li>${q(P.manter.length)} ${P.manter.length===1?"fica":"ficam"} como ${P.manter.length===1?"está":"estão"}, porque a versão daqui é igual ou mais recente.</li>`:""}
         ${P.sensor.length?`<li>${q(P.sensor.length)} de sensor ${P.sensor.length===1?"recebe":"recebem"} leituras da cópia (nada é apagado).</li>`:""}</ul>`}
       <div>${nada?`<button type="button" class="btn" id="bk-cancel" style="grid-column:1 / -1">Fechar</button>`
@@ -1167,8 +1168,9 @@ input.in{height:48px}
       }
       for(let i=0;i<alvo.length;i++){
         const iso=alvo[i];setBackupMsg(`Restaurando os dias: ${i+1} de ${alvo.length}…`);
-        const d=JSON.parse(JSON.stringify(P.c.dias[iso]));d.data=iso;
-        Object.values(d.refeicoes||{}).forEach(m=>{if(m&&Array.isArray(m.fotos)){m.fotos=m.fotos.map(id=>troca[id]).filter(Boolean);if(!m.fotos.length)delete m.fotos}});
+        const vindo=JSON.parse(JSON.stringify(P.c.dias[iso]));vindo.data=iso;
+        Object.values(vindo.refeicoes||{}).forEach(m=>{if(m&&Array.isArray(m.fotos)){m.fotos=m.fotos.map(id=>troca[id]).filter(Boolean);if(!m.fotos.length)delete m.fotos}});
+        const d=mergeDayRecords(S.days.get(iso),vindo);
         if(S.mode==="db"){
           const ref=S.db.doc("dias/"+iso);
           const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(()=>ref.set(d));queues[iso]=job;
