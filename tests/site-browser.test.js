@@ -13,7 +13,7 @@ let server,browser,baseUrl;
 test.before(async()=>{
   server=http.createServer((req,res)=>{
     const pathname=new URL(req.url,"http://localhost").pathname;
-    const relative=pathname==="/"?"site/index.html":pathname.replace(/^\//,"");
+    const relative=pathname==="/"||pathname==="/site/"?"site/index.html":pathname.replace(/^\//,"");
     const file=path.resolve(root,relative);
     if(!file.startsWith(root+path.sep)){res.writeHead(403).end();return}
     fs.readFile(file,(error,data)=>{
@@ -101,5 +101,28 @@ test("falha de armazenamento mantém o formulário preenchido",async()=>{
   assert.equal(await page.locator("#f-antes").inputValue(),"117");
   assert.equal(await page.locator("#f-comeu").inputValue(),"Pão e queijo");
   assert.match(await page.locator("#toast").innerText(),/Não foi possível salvar/);
+  await context.close();
+});
+
+test("modo offline guarda somente a estrutura pública do site",{timeout:15000},async()=>{
+  const context=await browser.newContext({serviceWorkers:"allow",locale:"pt-BR"});
+  const page=await context.newPage();
+  await page.goto(baseUrl+"/site/index.html",{waitUntil:"networkidle"});
+  await page.evaluate(()=>navigator.serviceWorker.ready);
+  await page.reload({waitUntil:"networkidle"});
+  await page.evaluate(()=>Promise.all([fetch("/_blob/foto-privada"),fetch("/site/_blob/foto-privada")]).catch(()=>null));
+
+  const cached=await page.evaluate(async()=>{
+    const keys=await caches.keys(),app=keys.find(key=>key.startsWith("diario-glicemia-"));
+    if(!app)return [];
+    return (await caches.open(app).then(cache=>cache.keys())).map(request=>new URL(request.url).pathname).sort();
+  });
+  assert.deepEqual(cached,["/site/","/site/icon.svg","/site/index.html","/site/logic.js","/site/manifest.webmanifest"]);
+  assert.equal(cached.some(item=>item.includes("_blob")),false);
+
+  await context.setOffline(true);
+  await page.reload({waitUntil:"domcontentloaded"});
+  await assert.doesNotReject(()=>page.getByRole("heading",{name:"Diário de Glicemia"}).waitFor());
+  await context.setOffline(false);
   await context.close();
 });
