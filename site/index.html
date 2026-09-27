@@ -1894,7 +1894,9 @@ input.in{height:48px}
   try{S.nome=localStorage.getItem(LOCAL_KEY+"-nome")||""}catch(e){}
   render();
   startDb();
-  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+  // Instalação como aplicativo e abertura sem internet só fazem sentido com o site hospedado por conta própria.
+  // Dentro do Claude (window.claude existe), o Artifact já é servido pela plataforma: não registra service worker.
+  if(!window.claude&&"serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
 </body>
