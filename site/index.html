@@ -130,6 +130,10 @@ details.tabela{margin-top:8px} details.tabela summary{cursor:pointer;color:var(-
 .favs{display:flex;flex-wrap:wrap;gap:6px}
 .fav{border:1px dashed var(--accent);background:var(--bg);color:var(--ink);border-radius:999px;padding:7px 12px;font-size:.88rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
 .fav small{color:var(--muted);margin-left:4px}
+.locais{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.locais .opt span{display:flex;justify-content:space-between;gap:6px;border-radius:12px;width:100%}
+.locais .opt{display:block}
+.locais .opt small{font-weight:400;opacity:.8}
 .charttip{position:fixed;z-index:40;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 10px;font-size:.82rem;line-height:1.35;max-width:240px;box-shadow:var(--shadow);white-space:pre-line}
 .actions{display:grid;gap:10px;margin-top:16px}
 .btn{height:50px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;padding-inline:16px}
@@ -284,6 +288,13 @@ input.in{height:48px}
   const SINTOMAS = ["Tremor","Suor","Palidez","Fome","Tontura","Choro / irritação","Sonolência","Confusão","Dor de cabeça","Visão embaçada","Sem sintomas"];
   const ETIQUETAS = ["Brincou muito / atividade física","Festa / doce","Comeu fora de casa","Na escola","Doente / febre","Não comeu tudo","Comeu mais que o normal","Dormiu mal","Nervoso / agitado"];
   const MOMENTOS = ["Ao acordar","Ao deitar","Madrugada","Antes de atividade física","Depois de atividade física","Passou mal","Outro"];
+  // Locais de aplicação de insulina, para acompanhar o rodízio. A chave é o que fica gravado; o nome é só para mostrar.
+  const LOCAIS = [
+    {k:"barriga-e",n:"Barriga esq."},{k:"barriga-d",n:"Barriga dir."},
+    {k:"braco-e",n:"Braço esq."},{k:"braco-d",n:"Braço dir."},
+    {k:"coxa-e",n:"Coxa esq."},{k:"coxa-d",n:"Coxa dir."},
+    {k:"nadega-e",n:"Nádega esq."},{k:"nadega-d",n:"Nádega dir."}
+  ];
   const LOCAL_KEY = "diario-glicemia-v1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
               period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null,
@@ -313,7 +324,7 @@ input.in{height:48px}
   function distrib(v){return v.length?{n:v.length,min:Math.min(...v),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),max:Math.max(...v)}:null}
   function has(v){return v!==null&&v!==undefined&&v!==""}
   function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
-  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
+  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.local)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
   const MAX_FOTOS=3;
   function fotoUrl(id){return S.fotoUrls[id]||("/_blob/"+id)}
   function thumbs(ids){return ids&&ids.length?`<span class="thumbs">${ids.map(id=>`<button type="button" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato" loading="lazy"></button>`).join("")}</span>`:""}
@@ -398,6 +409,14 @@ input.in{height:48px}
     if(g.carbo!=null&&!$("f-carbo").value)$("f-carbo").value=String(g.carbo).replace(".",",");
     renderOutras();checkCarbo();$("f-comeu").focus();
   }
+  function localNome(k){const l=LOCAIS.find(x=>x.k===k);return l?l.n:""}
+  // Última vez que cada local foi usado, sem contar a refeição que está sendo editada.
+  function ultimosUsos(isoX,kX){
+    const u={};
+    S.days.forEach((d,iso)=>MEALS.forEach(x=>{if(iso===isoX&&x.k===kX)return;const m=mealOf(iso,x.k);if(m&&m.local&&(!u[m.local]||iso>u[m.local]))u[m.local]=iso}));
+    return u;
+  }
+  function haQuanto(iso){if(!iso)return "não usado";const n=Math.round((parseIso(todayIso())-parseIso(iso))/864e5);return n<=0?"hoje":n===1?"ontem":`há ${n} dias`}
   function carboTxt(m){return has(m&&m.carbo)?fmt(+m.carbo,1)+" g de carboidrato":""}
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
@@ -549,7 +568,7 @@ input.in{height:48px}
       h+=`<li><button class="meal${isNow?" now":""}" data-meal="${x.k}">
         <span class="meal-name">${x.n}</span>
         <span class="meal-hint">${hint}${food}</span>
-        ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
+        ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.local?[localNome(m.local)]:[]),...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
           return it.length||m.criadoPor?`<span class="meal-tags">${esc(it.join(" · "))}${nomeSpan(m.criadoPor,it.length?" · por ":"por ")}</span>`:""})():""}
         ${filled?`<span class="readings">${rd("a",m.antes,"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
       </button></li>`;
@@ -569,7 +588,7 @@ input.in{height:48px}
     let rows="";
     MEALS.forEach(x=>{
       const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
+      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${m.local?`<span class="tagline">Aplicação: ${esc(localNome(m.local))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
     });
     let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
     const xs=extrasOf(iso);
@@ -1059,6 +1078,8 @@ input.in{height:48px}
         <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
         <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
       </div>
+      <div class="field"><span style="font-weight:700">Local da aplicação <span class="hint">(se aplicou insulina)</span></span>
+        <div class="locais" role="radiogroup" aria-label="Local da aplicação">${(()=>{const u=ultimosUsos(iso,k);return LOCAIS.map(l=>`<label class="opt"><input type="radio" name="f-local" value="${l.k}" ${m.local===l.k?"checked":""}><span>${l.n}<small>${haQuanto(u[l.k])}</small></span></label>`).join("")})()}</div></div>
       <div class="field"><label for="f-comeu">O que comeu e bebeu</label>${favsHtml(k,iso)}<textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
       <div class="field"><label for="f-carbo">Carboidratos <span class="hint">(opcional, se vocês contam)</span></label><div class="suffix" style="max-width:50%"><input id="f-carbo" inputmode="decimal" autocomplete="off" value="${has(m.carbo)?esc(String(m.carbo).replace(".",",")):""}" placeholder="—"><span>g</span></div><div id="w-carbo"></div></div>
       <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
@@ -1315,7 +1336,7 @@ input.in{height:48px}
     const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns(),okC=checkCarbo();
     if(!okA||!okD||!okI||!okC){toast("Corrija os campos marcados");return}
     const {iso,k}=S.editing, prev=mealOf(iso,k)||{};
-    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),depois:parseNum($("f-depois").value),
+    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),local:(document.querySelector('input[name="f-local"]:checked')||{}).value||"",depois:parseNum($("f-depois").value),
              comeu:$("f-comeu").value.trim(),obs:$("f-obs").value.trim(),
              tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value),
              fotos:d?d.cur.slice():(prev.fotos||[])};
@@ -1414,6 +1435,8 @@ input.in{height:48px}
         break}
     }
   });
+  document.addEventListener("pointerdown",e=>{const i=e.target.closest&&e.target.closest(".locais label")?.querySelector("input");if(i)i.dataset.era=i.checked?"1":""},true);
+  document.addEventListener("click",e=>{const i=e.target.matches&&e.target.matches('input[name="f-local"]')?e.target:null;if(i&&i.dataset.era==="1"){i.checked=false;i.dataset.era=""}});
   document.addEventListener("submit",e=>{if(e.target.id==="form"){e.preventDefault();submit()}else if(e.target.id==="hform"){e.preventDefault();submitHipo()}else if(e.target.id==="xform"){e.preventDefault();submitExtra()}});
   document.addEventListener("input",e=>{
     const id=e.target.id;
