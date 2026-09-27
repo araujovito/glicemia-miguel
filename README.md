@@ -1,5 +1,7 @@
 # Diário de Glicemia
 
+Antes do uso pela família, siga o [plano de validação](VALIDACAO.md) com dados fictícios em todos os aparelhos que serão usados.
+
 Um controle de glicemia para preencher pelo celular. Foi pensado para acompanhar **uma criança** com diabetes no dia a dia e levar o histórico organizado para as consultas.
 
 O projeto tem duas partes, que funcionam de forma independente:
