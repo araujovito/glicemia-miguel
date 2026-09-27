@@ -265,7 +265,7 @@ input.in{height:48px}
   const MOMENTOS = ["Ao acordar","Ao deitar","Madrugada","Antes de atividade física","Depois de atividade física","Passou mal","Outro"];
   const LOCAL_KEY = "diario-glicemia-v1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
-              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null };
+              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -360,6 +360,11 @@ input.in{height:48px}
     }).catch(fallback);
     window.claude.use("assets").then(a=>{S.assets=a;if(S.fotoDraft)renderFotos()}).catch(()=>{});
     window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
+    window.claude.use("user").then(u=>{
+      if(!u)return;S.user=u;
+      // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
+      u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
+    }).catch(()=>{});
   }
 
   /* ---------- lógica de refeições ---------- */
