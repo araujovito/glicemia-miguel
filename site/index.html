@@ -1,4 +1,12 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0E6B74">
 <title>Diário de Glicemia</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@500;700&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
@@ -37,6 +45,8 @@
   --f90:.30; --f50:.58;
 }
 *{box-sizing:border-box}
+.skip{position:fixed;left:12px;top:8px;z-index:100;transform:translateY(-150%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:8px}
+.skip:focus{transform:none}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
 button,input,textarea{font:inherit;color:inherit}
@@ -60,6 +70,10 @@ button{cursor:pointer}
 .todaybtn{flex:none;height:44px;padding-inline:12px;border-radius:12px;border:0;background:var(--accent-soft);color:var(--accent);font-weight:700}
 
 .banner{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:.9rem}
+.syncstatus{min-height:22px;margin:2px 0 6px;text-align:right;color:var(--muted);font-size:.82rem;font-weight:600}
+.syncstatus.saving{color:var(--warn)} .syncstatus.saved{color:var(--ok)} .syncstatus.error{color:var(--danger)}
+.conflict{border:1px solid var(--warn);background:var(--warn-soft);color:var(--ink);padding:12px;border-radius:12px;margin:10px 0;display:grid;gap:9px}
+.conflict .actions{margin:0}
 
 /* resumo do dia */
 .daystrip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:16px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
@@ -257,6 +271,9 @@ input.in{height:48px}
   .daystrip b{font-size:1.05rem}
 }
 </style>
+</head>
+<body>
+<a class="skip" href="#view">Pular para o conteúdo</a>
 
 <div class="wrap">
   <header class="top">
@@ -269,6 +286,7 @@ input.in{height:48px}
     </div>
   </header>
   <div id="banner" class="banner" hidden></div>
+  <div id="syncstatus" class="syncstatus" role="status" aria-live="polite"></div>
   <main id="view"></main>
 </div>
 
@@ -281,8 +299,11 @@ input.in{height:48px}
 <div id="sheet-root"></div>
 <div id="toast" class="toast" role="status" hidden></div>
 
+<script src="logic.js"></script>
 <script>
 (function(){
+  "use strict";
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -303,9 +324,10 @@ input.in{height:48px}
     {k:"nadega-e",n:"Nádega esq."},{k:"nadega-d",n:"Nádega dir."}
   ];
   const LOCAL_KEY = "diario-glicemia-v1";
+  const DEMO=new URLSearchParams(location.search).get("demo")==="1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
-              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
-              backup:{fotos:true,busy:false,msg:null} };
+              period:14, histWindow:0, histPage:1, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
+              backup:{fotos:true,busy:false,msg:null}, pending:0, syncState:"", syncTimer:null, eraseConfirm:false, erasing:false };
   const queues = {};
 
   /* ---------- utilidades ---------- */
@@ -323,13 +345,6 @@ input.in{height:48px}
   function hhmm(ts){const d=new Date(ts);return pad(d.getHours())+":"+pad(d.getMinutes())}
   function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
   function fmt(n,dec=0){if(n==null||!isFinite(n))return "–";return n.toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:dec})}
-  function parseNum(v){v=String(v).trim().replace(",",".");if(v==="")return null;const n=Number(v);return isFinite(n)?n:NaN}
-  function avg(a){return a.length?a.reduce((s,x)=>s+x,0)/a.length:null}
-  // Percentil com interpolação linear (o mesmo método do Excel PERCENTIL.INC).
-  function percentil(v,p){if(!v.length)return null;const s=v.slice().sort((a,b)=>a-b),i=(s.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return s[lo]+(s[hi]-s[lo])*(i-lo)}
-  function desvio(v){if(v.length<2)return null;const m=avg(v);return Math.sqrt(v.reduce((s,x)=>s+(x-m)**2,0)/(v.length-1))}
-  function distrib(v){return v.length?{n:v.length,min:Math.min(...v),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),max:Math.max(...v)}:null}
-  function has(v){return v!==null&&v!==undefined&&v!==""}
   function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
   function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.local)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
   const MAX_FOTOS=3;
@@ -361,12 +376,6 @@ input.in{height:48px}
       e.textContent=e.dataset.pre+n+e.dataset.pos;e.hidden=false});
   }
   /* "Das outras vezes": refeições anteriores com os mesmos alimentos. Só mostra o que aconteceu, sem julgar. */
-  const PARADAS=new Set("com sem de da do das dos e ou um uma uns umas no na nos nas em ao aos para por pouco pouca muito muita meio meia mais menos copo copos prato pratos pedaco pedacos colher colheres fatia fatias xicara xicaras unidade unidades".split(" "));
-  function palavras(t){
-    // Plural simples: pães/feijões → pão/feijão (antes de tirar os acentos), ovos → ovo.
-    return new Set(String(t||"").toLowerCase().replace(/(ães|ões|ãos)(?![a-zà-ú])/g,"ão").normalize("NFD").replace(/[\u0300-\u036f]/g,"").split(/[^a-z]+/)
-      .filter(w=>w.length>=3&&!PARADAS.has(w)).map(w=>w.length>3&&w.endsWith("s")?w.slice(0,-1):w));
-  }
   function parecidas(texto,iso0,k0){
     const q=palavras(texto);if(!q.size)return [];
     const out=[];
@@ -427,9 +436,34 @@ input.in{height:48px}
   function carboTxt(m){return has(m&&m.carbo)?fmt(+m.carbo,1)+" g de carboidrato":""}
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
+  function loadDemo(){
+    S.nome="Exemplo";S.plano="Exemplo de plano anotado pela família conforme orientação escrita da equipe médica.";
+    const comidas={cafe:["Pão com queijo, leite e mamão",42],lanche:["Iogurte natural e morangos",18],almoco:["Arroz, feijão, frango e salada",55],tarde:["Banana com aveia",28],janta:["Sopa de legumes com carne e torrada",46],ceia:["Leite e biscoito integral",22]};
+    const horas={cafe:["07:20","07:35","09:35"],lanche:["10:05","10:15","12:15"],almoco:["12:25","12:40","14:40"],tarde:["16:05","16:15","18:15"],janta:["19:10","19:25","21:25"],ceia:["21:45","21:55","23:55"]};
+    for(let n=0;n<12;n++){
+      const iso=addDays(todayIso(),-n),refeicoes={};
+      MEALS.forEach((x,i)=>{const [antesHora,refeicaoHora,depoisHora]=horas[x.k],base=96+i*7+(n%4)*5;
+        refeicoes[x.k]={antes:base,antesHora,antesEm:isoTime(iso,antesHora),refeicaoHora,insulina:i===1?0:2+(i%3)*.5,local:LOCAIS[(n+i)%LOCAIS.length].k,
+          comeu:comidas[x.k][0],carbo:comidas[x.k][1],depois:base+18+(i%2)*12,depoisHora,
+          tags:n===2&&i===3?["Brincou muito / atividade física"]:n===5&&i===4?["Comeu fora de casa"]:[],
+          obs:n===7&&i===0?"Dormiu menos que o habitual.":"",criadoEm:isoTime(iso,refeicaoHora),atualizadoEm:isoTime(iso,depoisHora)};
+      });
+      const hipos=n===3?{demoHipo:{id:"demoHipo",hora:"16:50",valor:64,situacao:"Atividade física",sintomas:["Palidez","Fome"],tratamento:"Conduta registrada conforme o plano da equipe médica.",nova:92,novaHora:"17:10",criadoEm:isoTime(iso,"16:50"),atualizadoEm:isoTime(iso,"17:10")}}:{};
+      const extras={demoExtra:{id:"demoExtra",hora:"22:35",valor:118,momento:"Ao deitar",obs:n===1?"Dia de escola.":"",criadoEm:isoTime(iso,"22:35"),atualizadoEm:isoTime(iso,"22:35")}};
+      S.days.set(iso,{data:iso,refeicoes,hipos,extras,atualizadoEm:isoTime(iso,"23:55")});
+      if(n<7){const min=[],mg=[],tipo=[];for(let m=0;m<1440;m+=15){min.push(m);mg.push(Math.round(112+24*Math.sin((m-360)/1440*Math.PI*2)+10*Math.sin((m+n*17)/180*Math.PI)));tipo.push(0)}S.sensor.set(iso,{data:iso,min,mg,tipo,fonte:"Demonstração",atualizadoEm:Date.now()})}
+    }
+  }
+
   const $ = id=>document.getElementById(id);
   let toastTimer;
   function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,2400)}
+  function setSync(state,msg){
+    S.syncState=state;const el=$("syncstatus");if(!el)return;
+    el.className="syncstatus "+(state||"");el.textContent=msg||"";
+    clearTimeout(S.syncTimer);
+    if(state==="saved")S.syncTimer=setTimeout(()=>{if(!S.pending)setSync("","")},3500);
+  }
 
   /* ---------- armazenamento ---------- */
   function loadSensorLocal(){try{const raw=localStorage.getItem(LOCAL_KEY+"-sensor");if(raw)S.sensor=new Map(Object.entries(JSON.parse(raw)))}catch(e){}}
@@ -448,14 +482,28 @@ input.in{height:48px}
   function persist(iso,body,delta){
     if(S.mode==="db"){
       const ref=S.db.doc("dias/"+iso);
+      S.pending++;setSync("saving","Salvando…");
       const job=(queues[iso]||Promise.resolve()).catch(()=>{}).then(async()=>{
         try{await ref.update(delta)}
         catch(e){if(e&&e.code==="invalid_argument")return ref.set(body);throw e}   // dia ainda não existe (ou sem permissão: o set rejeita de novo)
-      });
+      }).then(r=>{S.pending--;setSync(S.pending?"saving":"saved",S.pending?"Salvando…":"Salvo agora");return r},e=>{S.pending--;setSync("error","Não foi possível salvar");throw e});
       queues[iso]=job;
       return job;
     }
-    return saveLocal()?Promise.resolve():Promise.reject({code:"local"});
+    if(saveLocal()){setSync("saved","Salvo neste aparelho");return Promise.resolve()}
+    setSync("error","Não foi possível salvar neste aparelho");return Promise.reject({code:"local"});
+  }
+
+  function editingRecord(days,ed){
+    if(!ed)return null;const d=days.get(ed.iso);if(!d)return null;
+    if(ed.kind==="meal")return d.refeicoes&&d.refeicoes[ed.k]||null;
+    return listOf(d[ed.kind==="hipo"?"hipos":"extras"]).find(x=>x.id===ed.id)||null;
+  }
+  function showConflict(){
+    const form=$("form")||$("hform")||$("xform");if(!form||$("conflict"))return;
+    const box=document.createElement("div");box.id="conflict";box.className="conflict";box.setAttribute("role","alert");
+    box.innerHTML='<strong>Este registro mudou em outro aparelho.</strong><span>Carregue a versão mais recente para conferir, ou salve a sua versão sabendo que ela substituirá a alteração mais nova.</span><div class="actions"><button type="button" class="btn" id="conflict-reload">Carregar versão recente</button><button type="button" class="btn primary" id="conflict-force">Salvar minha versão</button></div>';
+    const actions=form.querySelector(".actions:last-of-type");form.insertBefore(box,actions);
   }
 
   function saveNome(nome){
@@ -469,6 +517,7 @@ input.in{height:48px}
   }
 
   function startDb(){
+    if(DEMO){S.mode="demo";S.readOnly=true;loadDemo();render();return}
     let settled=false;
     const fallback=()=>{if(settled)return;settled=true;S.mode="local";loadLocal();render()};
     const use=window.claude&&window.claude.use;
@@ -479,6 +528,7 @@ input.in{height:48px}
       db.collection("dias").onSnapshot(snap=>{
         const m=new Map();
         snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});
+        if(S.editing&&!S.editing.force&&recordChanged(editingRecord(m,S.editing),S.editing.baseUpdated)){S.editing.conflict=true;showConflict()}
         S.days=m;
         if(!S.editing)render(); else renderView();
       },err=>{
@@ -524,7 +574,8 @@ input.in{height:48px}
     $("next").disabled=S.date>=todayIso();
     $("gotoday").hidden=S.date===todayIso();
     const b=$("banner");
-    if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador. Abra pelo link do Claude para salvar na nuvem."}
+    if(S.mode==="demo"){b.hidden=false;b.textContent="Modo de demonstração: todos os nomes, valores e situações desta tela são fictícios. Nada será salvo."}
+    else if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador. Abra pelo link do Claude para salvar na nuvem."}
     else if(S.mode==="offline"){b.hidden=false;b.textContent="Sem conexão com o armazenamento. Recarregue a página antes de registrar."}
     else if(S.readOnly){b.hidden=false;b.textContent="Você não tem permissão para registrar neste diário. Peça a quem compartilhou o acesso de edição."}
     else b.hidden=true;
@@ -581,7 +632,7 @@ input.in{height:48px}
         <span class="meal-hint">${hint}${food}</span>
         ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.local?[localNome(m.local)]:[]),...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
           return it.length||m.criadoPor?`<span class="meal-tags">${esc(it.join(" · "))}${nomeSpan(m.criadoPor,it.length?" · por ":"por ")}</span>`:""})():""}
-        ${filled?`<span class="readings">${rd("a",m.antes,"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
+        ${filled?`<span class="readings">${rd("a",m.antes,m.antesHora?"antes "+m.antesHora:"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,m.depoisHora?"2h "+m.depoisHora:"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
       </button></li>`;
     });
     h+=`</ul>`;
@@ -600,7 +651,7 @@ input.in{height:48px}
     let rows="";
     MEALS.forEach(x=>{
       const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${m.local?`<span class="tagline">Aplicação: ${esc(localNome(m.local))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
+      rows+=`<tr><td>${x.n}${m.refeicaoHora?`<span class="tagline">${esc(m.refeicaoHora)}</span>`:""}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}${m.antesHora?`<span class="tagline">${esc(m.antesHora)}</span>`:""}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}${m.depoisHora?`<span class="tagline">${esc(m.depoisHora)}</span>`:""}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${m.local?`<span class="tagline">Aplicação: ${esc(localNome(m.local))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
     });
     let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
     const xs=extrasOf(iso);
@@ -618,21 +669,27 @@ input.in{height:48px}
   }
 
   function viewHistory(){
-    const used=new Set();daysWithData().forEach(iso=>dayTags(iso).forEach(t=>used.add(t)));
+    const start=S.histWindow?addDays(todayIso(),-(S.histWindow-1)):"0000-00-00";
+    const source=daysWithData().filter(iso=>iso>=start&&iso<=todayIso());
+    const used=new Set();source.forEach(iso=>dayTags(iso).forEach(t=>used.add(t)));
     if(S.tagFilter&&!used.has(S.tagFilter))S.tagFilter=null;
-    const all=daysWithData().filter(iso=>!S.tagFilter||dayTags(iso).includes(S.tagFilter));
+    const all=source.filter(iso=>!S.tagFilter||dayTags(iso).includes(S.tagFilter));
+    const pageSize=7,pages=Math.max(1,Math.ceil(all.length/pageSize));
+    S.histPage=Math.min(Math.max(1,S.histPage),pages);
+    const first=(S.histPage-1)*pageSize,current=all.slice(first,first+pageSize);
     let h=`<h2>Histórico</h2><p class="sub">${all.length?`${all.length} ${all.length===1?"dia":"dias"} com registro, do mais recente para o mais antigo.`:"Nada registrado ainda."}</p>`;
+    h+=`<div class="seg" role="group" aria-label="Filtrar histórico por período">${[[0,"Todos"],[7,"Semana"],[30,"Mês"],[365,"Ano"]].map(([n,l])=>`<button data-hwindow="${n}" aria-pressed="${S.histWindow===n}">${l}</button>`).join("")}</div>`;
     if(used.size)h+=`<div class="seg" role="group" aria-label="Filtrar por etiqueta"><button data-tagf="" aria-pressed="${!S.tagFilter}">Todos os dias</button>${ETIQUETAS.filter(t=>used.has(t)).map(t=>`<button data-tagf="${esc(t)}" aria-pressed="${S.tagFilter===t}">${esc(t)}</button>`).join("")}</div>`;
-    if(!all.length)return h+`<div class="empty-state">Os dias registrados aparecem aqui, prontos para mostrar na consulta.</div>`;
+    if(!all.length)return h+`<div class="empty-state">Não há registros que correspondam aos filtros escolhidos.</div>`;
     h+=`<div class="list">`;
-    all.slice(0,S.histLimit).forEach(iso=>{
+    current.forEach(iso=>{
       const ms=MEALS.map(x=>mealOf(iso,x.k)).filter(Boolean);
       const a=avg(ms.filter(m=>has(m.antes)).map(m=>+m.antes)), d=avg(ms.filter(m=>has(m.depois)).map(m=>+m.depois));
       h+=`<section class="card"><div class="dayhead"><strong>${esc(shortDate(iso))}</strong><span class="unit num">antes ${fmt(a)} · 2h ${fmt(d)}</span></div>${dayTable(iso)}
         <button class="linkbtn" data-open="${iso}">Abrir este dia</button></section>`;
     });
     h+=`</div>`;
-    if(all.length>S.histLimit)h+=`<div class="actions"><button class="btn" id="more">Mostrar mais dias</button></div>`;
+    if(pages>1)h+=`<nav class="actions" aria-label="Páginas do histórico" style="grid-template-columns:1fr auto 1fr"><button class="btn" data-hpage="${S.histPage-1}" ${S.histPage===1?"disabled":""}>Anterior</button><span class="note" style="align-self:center;text-align:center">Página ${S.histPage} de ${pages}</span><button class="btn" data-hpage="${S.histPage+1}" ${S.histPage===pages?"disabled":""}>Próxima</button></nav>`;
     return h;
   }
 
@@ -889,11 +946,7 @@ input.in{height:48px}
   }
   // Junta leituras novas com as que já existem no dia (a mesma leitura é substituída, nunca duplicada).
   function juntarSensor(atual,novos){
-    const m=new Map();
-    if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+(atual.tipo||[])[i],{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
-    novos.forEach((p,k)=>m.set(k,p));
-    const pts=[...m.values()].sort((a,b)=>a.min-b.min||a.tipo-b.tipo);
-    return {min:pts.map(p=>p.min),mg:pts.map(p=>p.mg),tipo:pts.map(p=>p.tipo)};
+    return mergeSensor(atual,novos);
   }
   function pontosSensor(iso){
     const d=S.sensor.get(iso);if(!d||!(d.min||[]).length)return [];
@@ -1011,7 +1064,12 @@ input.in{height:48px}
       <div class="actions"><button class="btn" id="bk-export"${B.busy||!n?" disabled":""}>Baixar cópia de segurança</button>
       ${ro||B.busy||B.plano?"":`<label class="btn filebtn">Restaurar de uma cópia<input type="file" id="bk-file" accept=".json,application/json"></label>`}</div>
       ${B.plano?planoHtml(B.plano):""}
-      <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p></section>`;
+      <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p>
+      <details style="margin-top:18px"><summary>Privacidade e exclusão dos dados</summary>
+        <p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>
+        ${S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, fotos, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
+        `<button type="button" class="btn danger" id="erase-start" ${ro?"disabled":""}>Apagar todos os dados deste diário</button>`}
+      </details></section>`;
   }
   function setBackupMsg(msg){S.backup.msg=msg;const el=$("bk-msg");if(el){el.textContent=msg||"";el.hidden=!msg}}
   function blobToDataUrl(b){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)})}
@@ -1135,6 +1193,23 @@ input.in{height:48px}
         +(semFoto?` ${semFoto} ${semFoto===1?"foto não voltou":"fotos não voltaram"} ${S.mode==="db"?"(não estavam na cópia)":"(o modo local não guarda fotos)"}.`:""));
     }catch(err){setBackupMsg(typeof err==="string"?err:"A restauração parou por um erro. Os dias já restaurados foram mantidos; tente de novo.")}
     finally{B.busy=false;render()}
+  }
+
+  async function eraseAllData(){
+    if(S.erasing)return;S.erasing=true;renderView();setSync("saving","Apagando dados…");
+    try{
+      const fotoIds=[...new Set([...S.days.values()].flatMap(fotosDoDia))];
+      if(S.mode==="db"){
+        for(const iso of S.days.keys())await S.db.doc("dias/"+iso).delete();
+        for(const iso of S.sensor.keys())await S.db.doc("sensor/"+iso).delete();
+        await S.db.doc("config/crianca").delete().catch(()=>{});
+        await S.db.doc("config/plano").delete().catch(()=>{});
+        if(S.assets)for(const id of fotoIds)await S.assets.delete(id).catch(()=>{});
+      }
+      [LOCAL_KEY,LOCAL_KEY+"-sensor",LOCAL_KEY+"-nome",LOCAL_KEY+"-plano"].forEach(k=>{try{localStorage.removeItem(k)}catch(e){}});
+      S.days=new Map();S.sensor=new Map();S.nome="";S.plano="";S.eraseConfirm=false;S.erasing=false;
+      setSync("saved","Todos os dados foram apagados");render();toast("Dados apagados");
+    }catch(e){S.erasing=false;setSync("error","Não foi possível apagar tudo");renderView();toast("A exclusão não terminou. Tente novamente.")}
   }
 
   /* ---------- relatório PDF ---------- */
@@ -1350,6 +1425,10 @@ input.in{height:48px}
         <div class="field"><label for="f-antes">Glicemia</label><div class="suffix"><input id="f-antes" inputmode="numeric" autocomplete="off" value="${has(m.antes)?esc(m.antes):""}" placeholder="—"><span>mg/dL</span></div><div id="w-antes"></div></div>
         <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
       </div>
+      <div class="pair">
+        <div class="field"><label for="f-antes-hora">Horário da medição</label><input class="in" type="time" id="f-antes-hora" value="${esc(m.antesHora||(m.antesEm?hhmm(m.antesEm):""))}"></div>
+        <div class="field"><label for="f-refeicao-hora">Horário da refeição/insulina</label><input class="in" type="time" id="f-refeicao-hora" value="${esc(m.refeicaoHora||"")}"></div>
+      </div>
       <div class="field"><span style="font-weight:700">Local da aplicação <span class="hint">(se aplicou insulina)</span></span>
         <div class="locais" role="radiogroup" aria-label="Local da aplicação">${(()=>{const u=ultimosUsos(iso,k);return LOCAIS.map(l=>`<label class="opt"><input type="radio" name="f-local" value="${l.k}" ${m.local===l.k?"checked":""}><span>${l.n}<small>${haQuanto(u[l.k])}</small></span></label>`).join("")})()}</div></div>
       <div class="field"><label for="f-comeu">O que comeu e bebeu</label>${favsHtml(k,iso)}<textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
@@ -1360,13 +1439,16 @@ input.in{height:48px}
       <div class="field"><span style="font-weight:700">Etiquetas <span class="hint">(toque para marcar)</span></span><div class="opts">
         ${ETIQUETAS.map(t=>`<label class="opt"><input type="checkbox" name="f-tag" value="${esc(t)}" ${(m.tags||[]).includes(t)?"checked":""}><span>${esc(t)}</span></label>`).join("")}</div></div>
       <div class="group-label">Depois</div>
-      <div class="field"><label for="f-depois">Glicemia 2 horas depois</label><div class="suffix"><input id="f-depois" inputmode="numeric" autocomplete="off" value="${has(m.depois)?esc(m.depois):""}" placeholder="—"><span>mg/dL</span></div><div class="hint">${due}</div><div id="w-depois"></div></div>
+      <div class="pair"><div class="field"><label for="f-depois">Glicemia 2 horas depois</label><div class="suffix"><input id="f-depois" inputmode="numeric" autocomplete="off" value="${has(m.depois)?esc(m.depois):""}" placeholder="—"><span>mg/dL</span></div><div id="w-depois"></div></div>
+        <div class="field"><label for="f-depois-hora">Horário da medição</label><input class="in" type="time" id="f-depois-hora" value="${esc(m.depoisHora||"")}"></div></div>
+      <div class="hint">${due}</div>
       <div class="field"><label for="f-obs">Observações <span class="hint">(se necessário)</span></label><textarea class="in" id="f-obs" rows="2" placeholder="Ex.: brincou no parque antes, comeu na escola">${esc(m.obs||"")}</textarea></div>
       <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
       ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
     </form></div>`;
     ["antes","depois"].forEach(f=>checkGlu(f));checkIns();checkCarbo();
     renderFotos();renderOutras();fillNames();
+    setTimeout(()=>$("f-antes")&&$("f-antes").focus(),0);
   }
   function checkGlu(f){
     const el=$("f-"+f),w=$("w-"+f);if(!el||!w)return true;
@@ -1426,6 +1508,7 @@ input.in{height:48px}
       ${id&&!ro?delBlock("Apagar este registro de hipoglicemia?"):""}
     </form></div>`;
     checkHipo(false);fillNames();
+    setTimeout(()=>$("h-hora")&&$("h-hora").focus(),0);
   }
   function checkHipo(strict){
     let ok=true;
@@ -1442,6 +1525,7 @@ input.in{height:48px}
     return ok;
   }
   function submitHipo(){
+    if(S.editing.conflict&&!S.editing.force){showConflict();toast("Confira a alteração feita em outro aparelho");return}
     if(!checkHipo(true)){toast("Corrija os campos marcados");return}
     const {iso,id}=S.editing, prev=(id&&hiposOf(iso).find(h=>h.id===id))||{};
     const lo=$("h-lo").checked;
@@ -1482,6 +1566,7 @@ input.in{height:48px}
       ${id&&!ro?delBlock("Apagar esta medição?"):""}
     </form></div>`;
     checkExtra(false);fillNames();
+    setTimeout(()=>$("x-hora")&&$("x-hora").focus(),0);
   }
   function checkExtra(strict){
     let ok=true;
@@ -1495,6 +1580,7 @@ input.in{height:48px}
     return ok;
   }
   function submitExtra(){
+    if(S.editing.conflict&&!S.editing.force){showConflict();toast("Confira a alteração feita em outro aparelho");return}
     if(!checkExtra(true)){toast("Corrija os campos marcados");return}
     const {iso,id}=S.editing, prev=(id&&extrasOf(iso).find(e=>e.id===id))||{};
     const lo=$("x-lo").checked, hi=$("x-hi").checked, mom=document.querySelector('input[name="x-mom"]:checked');
@@ -1504,7 +1590,7 @@ input.in{height:48px}
     writeDay(iso,{tipo:"extra",chave:clean.id,valor:clean});
   }
 
-  function openExtra(iso,id){S.editing={kind:"extra",iso,id:id||null};renderSheet()}
+  function openExtra(iso,id){const x=(id&&extrasOf(iso).find(e=>e.id===id))||{};S.editing={kind:"extra",iso,id:id||null,baseUpdated:+x.atualizadoEm||0};renderSheet()}
   function renderFotos(){
     const box=$("fotos"), d=S.fotoDraft;if(!box||!d)return;
     const ro=S.readOnly||S.mode==="offline", canAdd=!!S.assets&&!ro;
@@ -1570,9 +1656,9 @@ input.in{height:48px}
   function openEditor(iso,k){
     const m=mealOf(iso,k)||{};
     S.fotoDraft={orig:[...(m.fotos||[])],cur:[...(m.fotos||[])],novos:[],busy:false};
-    S.editing={kind:"meal",iso,k};renderSheet();
+    S.editing={kind:"meal",iso,k,baseUpdated:+m.atualizadoEm||0};renderSheet();
   }
-  function openHipo(iso,id){S.editing={kind:"hipo",iso,id:id||null};renderSheet()}
+  function openHipo(iso,id){const x=(id&&hiposOf(iso).find(h=>h.id===id))||{};S.editing={kind:"hipo",iso,id:id||null,baseUpdated:+x.atualizadoEm||0};renderSheet()}
   function closeEditor(){S.editing=null;renderSheet();renderView()}
 
   // Mapa {id: registro} a partir do formato atual ou da lista antiga.
@@ -1604,15 +1690,17 @@ input.in{height:48px}
 
   async function submit(){
     const d=S.fotoDraft;
+    if(S.editing.conflict&&!S.editing.force){showConflict();toast("Confira a alteração feita em outro aparelho");return}
     if(d&&d.busy){toast("Aguarde a foto terminar de enviar");return}
     const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns(),okC=checkCarbo();
     if(!okA||!okD||!okI||!okC){toast("Corrija os campos marcados");return}
     const {iso,k}=S.editing, prev=mealOf(iso,k)||{};
-    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),local:(document.querySelector('input[name="f-local"]:checked')||{}).value||"",depois:parseNum($("f-depois").value),
+    const antesHora=$("f-antes-hora").value, refeicaoHora=$("f-refeicao-hora").value, depoisHora=$("f-depois-hora").value;
+    const m={antes:parseNum($("f-antes").value),antesHora,refeicaoHora,insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),local:(document.querySelector('input[name="f-local"]:checked')||{}).value||"",depois:parseNum($("f-depois").value),depoisHora,
              comeu:$("f-comeu").value.trim(),obs:$("f-obs").value.trim(),
              tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value),
              fotos:d?d.cur.slice():(prev.fotos||[])};
-    if(has(m.antes))m.antesEm=has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null);
+    if(has(m.antes))m.antesEm=antesHora?isoTime(iso,antesHora):(has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null));
     const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
     const valor=mealFilled(clean)?Object.assign(clean,{criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()},autoria(prev)):null;
     S.fotoDraft=null;
@@ -1622,9 +1710,15 @@ input.in{height:48px}
       else deleteAssets(d.novos);}
   }
 
-  const DL_MSG="Esta tela do Claude não permite baixar arquivos. Abra o link no navegador (Chrome ou Safari, em claude.ai) e toque de novo. Enquanto isso, use \"Copiar resumo em texto\".";
+  const DL_MSG="Este navegador não permitiu baixar o arquivo. Abra o diário no Chrome ou Safari e tente novamente.";
+  const browserDownloads={save:async({filename,data})=>{
+    const blob=data instanceof Blob?data:new Blob([data]);
+    const url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=filename;a.hidden=true;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  }};
   async function getDownloads(){
     if(!S.downloads&&window.claude&&window.claude.use){try{S.downloads=await window.claude.use("downloads")}catch(e){}}
+    if(!S.downloads&&typeof URL.createObjectURL==="function")S.downloads=browserDownloads;
     S.dlMsg=S.downloads?null:DL_MSG;
     renderView();
     return S.downloads;
@@ -1654,14 +1748,24 @@ input.in{height:48px}
     if(t.dataset.meal){openEditor(S.date,t.dataset.meal);return}
     if(t.dataset.hipo){openHipo(S.date,t.dataset.hipo);return}
     if(t.dataset.extra){openExtra(S.date,t.dataset.extra);return}
-    if(t.dataset.tagf!==undefined){S.tagFilter=t.dataset.tagf||null;S.histLimit=20;renderView();return}
+    if(t.dataset.hwindow!==undefined){S.histWindow=Number(t.dataset.hwindow);S.histPage=1;renderView();return}
+    if(t.dataset.hpage!==undefined){S.histPage=Number(t.dataset.hpage);renderView();window.scrollTo(0,0);return}
+    if(t.dataset.tagf!==undefined){S.tagFilter=t.dataset.tagf||null;S.histPage=1;renderView();return}
     if(t.dataset.open){S.date=t.dataset.open;S.tab="dia";render();window.scrollTo(0,0);return}
     if(t.dataset.period!==undefined){S.period=Number(t.dataset.period);S.copyText=null;renderView();return}
+    if(t.id==="conflict-reload"){
+      const ed={...S.editing};discardDraft();
+      if(ed.kind==="meal")openEditor(ed.iso,ed.k);else if(ed.kind==="hipo")openHipo(ed.iso,ed.id);else openExtra(ed.iso,ed.id);
+      toast("Versão mais recente carregada");return;
+    }
+    if(t.id==="conflict-force"){
+      S.editing.force=true;S.editing.conflict=false;
+      if(S.editing.kind==="meal")submit();else if(S.editing.kind==="hipo")submitHipo();else submitExtra();return;
+    }
     switch(t.id){
       case "prev":S.date=addDays(S.date,-1);render();break;
       case "next":if(S.date<todayIso()){S.date=addDays(S.date,1);render()}break;
       case "gotoday":S.date=todayIso();render();break;
-      case "more":S.histLimit+=20;renderView();break;
       case "close":case "cancel":discardDraft();closeEditor();break;
       case "add-hipo":openHipo(S.date,null);break;
       case "add-extra":openExtra(S.date,null);break;
@@ -1698,6 +1802,9 @@ input.in{height:48px}
         catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
         break}
       case "bk-export":exportBackup();break;
+      case "erase-start":S.eraseConfirm=true;renderView();setTimeout(()=>$("erase-word")&&$("erase-word").focus(),0);break;
+      case "erase-cancel":S.eraseConfirm=false;renderView();break;
+      case "erase-confirm":eraseAllData();break;
       case "lv-cancel":S.imp.plano=null;setImpMsg(null);renderView();break;
       case "lv-import":importarSensor();break;
       case "bk-cancel":S.backup.plano=null;setBackupMsg(null);renderView();break;
@@ -1715,6 +1822,7 @@ input.in{height:48px}
   document.addEventListener("input",e=>{
     const id=e.target.id;
     if(id==="rep-nome")return;
+    if(id==="erase-word"){const b=$("erase-confirm");if(b)b.disabled=e.target.value.trim()!=="APAGAR"||S.erasing;return}
     if(id==="x-valor"||id==="x-hora"){checkExtra(false);return}
     if(id==="h-valor"||id==="h-nova"||id==="h-hora"){checkHipo(false);return}
     if(id==="f-comeu"){clearTimeout(outrasTimer);outrasTimer=setTimeout(renderOutras,250);return}
@@ -1736,7 +1844,7 @@ input.in{height:48px}
     if(id==="rep-nome"){const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
       try{await saveNome(nome);toast(nome?"Nome salvo":"Nome removido")}catch(err){S.nome=antes;renderTop();toast("Não foi possível salvar o nome")}return}
     if(e.target.id==="h-lo"){const v=$("h-valor");v.disabled=e.target.checked;if(e.target.checked)v.value="";checkHipo(false)}});
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&$("lightbox"))closeLightbox()});
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("lightbox")){closeLightbox();return}if(S.editing){discardDraft();closeEditor()}});
   document.addEventListener("error",e=>{const t=e.target;if(t&&t.tagName==="IMG"&&t.dataset.foto&&!t.classList.contains("broken")){t.classList.add("broken");t.alt="Foto indisponível"}},true);
   $("datepick").addEventListener("change",e=>{const v=e.target.value;if(v&&v<=todayIso()){S.date=v;render()}});
 
@@ -1745,5 +1853,8 @@ input.in{height:48px}
   try{S.nome=localStorage.getItem(LOCAL_KEY+"-nome")||""}catch(e){}
   render();
   startDb();
+  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
+</body>
+</html>

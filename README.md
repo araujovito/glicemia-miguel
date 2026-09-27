@@ -28,6 +28,7 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - **Pratos frequentes:** o que já foi escrito 2 vezes ou mais naquela refeição aparece como botão, e um toque preenche o prato e os carboidratos.
 - **Local da aplicação:** 8 locais (barriga, braço, coxa e nádega, dos dois lados). Cada um mostra quando foi usado pela última vez, para ajudar no rodízio. O site não indica o próximo local.
 - Depois de anotar a glicemia antes, aparece o lembrete "2h às HH:MM".
+- Os horários da medição antes, da refeição/aplicação e da medição 2 h depois podem ser registrados separadamente.
 - Há **etiquetas** de um toque: atividade física, festa/doce, comeu fora, na escola, doente, não comeu tudo, comeu mais que o normal, dormiu mal, nervoso.
 - Cada refeição aceita até 3 **fotos do prato**.
 - O **registro de hipoglicemia** guarda horário, valor (ou "LO"), situação, sintomas, o que foi feito e a nova medição. Ele mostra o plano que a família anotou da equipe médica.
@@ -37,6 +38,7 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - Mãe, pai, avó e escola registram no mesmo lugar, cada um no próprio celular, e veem as anotações dos outros na hora.
 - Cada registro mostra quem anotou e quem alterou por último ("Anotado por Ana · alterado por João às 14:32").
 - Quem não tem permissão para editar vê um aviso logo ao abrir, e o botão Salvar fica desabilitado.
+- O topo mostra quando uma alteração está sendo salva e quando foi concluída. Se duas pessoas alterarem o mesmo registro ao mesmo tempo, o site pede que o cuidador escolha entre carregar a versão mais recente ou substituir conscientemente.
 
 **Das outras vezes:** enquanto você escreve o que a criança comeu, aparecem as refeições anteriores com os mesmos alimentos, com a glicemia antes → 2 h, a variação, a insulina e as fotos.
 
@@ -63,6 +65,9 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
   - num dia que existe nos dois lados, fica a versão alterada por último;
   - as leituras do sensor são juntadas, como na importação;
   - antes de gravar, o site mostra o que vai acontecer.
+- Nas opções de privacidade é possível apagar todos os registros, leituras, fotos e configurações, com confirmação digitada.
+
+**Instalação no celular:** quando servido por HTTPS ou em `localhost`, o diário pode ser instalado como aplicativo. O aplicativo guarda somente os arquivos necessários para abrir a interface; os registros continuam no armazenamento configurado ou no navegador.
 
 ### Onde os dados ficam
 
@@ -75,7 +80,7 @@ O site foi feito para rodar como **Artifact do Claude** (claude.ai). Ele usa as 
 | `downloads` | Baixar o PDF, o CSV e a cópia de segurança |
 | `user` (escopo `profile`) | Saber quem está registrando, mostrar o nome de quem anotou e saber se a pessoa pode editar |
 
-Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), e não dá para enviar fotos nem baixar arquivos.
+Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. Não dá para enviar fotos, mas PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
 
 ### Como usar
 
@@ -124,6 +129,8 @@ A planilha tem 5 abas:
 - *Como usar*
 - *Folha diária A4*
 
+A aba de preenchimento também possui horários, carboidratos, local da aplicação e etiquetas. As sete primeiras colunas continuam compatíveis com o CSV exportado pelo site.
+
 As datas de todas as abas saem da **data do primeiro dia**, que fica na aba *Como usar* e pode ser trocada.
 
 Para gerar a planilha de novo:
@@ -131,6 +138,12 @@ Para gerar a planilha de novo:
 ```bash
 pip install openpyxl
 python planilha/gerar_planilha.py
+```
+
+Para executar os testes da lógica compartilhada do site:
+
+```bash
+npm test
 ```
 
 O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.

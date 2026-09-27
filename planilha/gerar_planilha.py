@@ -81,9 +81,9 @@ passos = [
     ("1. Início", "Ajuste a data de início acima (uma única vez)."),
     ("2. No celular", "Abra a aba 'Preencher pelo celular'. Cada dia já tem as 6 refeições prontas, na ordem: "
                       "Café da manhã, Lanche, Almoço, Café da tarde, Janta e Ceia."),
-    ("3. Antes de comer", "Na linha do dia e da refeição, anote a glicemia antes (mg/dL) e as unidades de insulina aplicadas."),
-    ("4. Durante", "Anote o que comeu e bebeu."),
-    ("5. Duas horas depois", "Anote a glicemia 2 horas depois (mg/dL). Use Observações quando necessário "
+    ("3. Antes de comer", "Na linha do dia e da refeição, anote o horário, a glicemia antes (mg/dL) e as unidades de insulina aplicadas."),
+    ("4. Durante", "Anote o horário da refeição, o que comeu e bebeu e, se a família conta, os carboidratos em gramas."),
+    ("5. Duas horas depois", "Anote o horário e a glicemia 2 horas depois (mg/dL). Use Observações quando necessário "
                              "(ex.: hipoglicemia, atividade física, refeição fora de casa)."),
     ("6. Consulta médica", "Aba 'Histórico por dia': um dia por linha, pronta para imprimir. "
                            "Aba 'Resumo': médias por refeição no período escolhido."),
@@ -108,8 +108,10 @@ cu["B18"].font = Font(name="Arial", size=10, color="0000FF")
 # ---------------------------------------------------------------- Preencher pelo celular
 pc = wb.create_sheet("Preencher pelo celular", 0)
 colunas = ["Data", "Refeição", "Glicemia antes\n(mg/dL)", "Insulina\n(unidades)",
-           "O que comeu e bebeu", "Glicemia 2h\ndepois (mg/dL)", "Observações"]
-larguras = [13, 14, 11, 10, 34, 12, 28]
+           "O que comeu e bebeu", "Glicemia 2h\ndepois (mg/dL)", "Observações",
+           "Horário\nantes", "Horário da\nrefeição/insulina", "Horário\n2h depois",
+           "Carboidratos\n(g)", "Local da\naplicação", "Etiquetas"]
+larguras = [13, 14, 11, 10, 34, 12, 28, 10, 14, 10, 11, 18, 24]
 cabecalho(pc, 1, colunas)
 for i, w in enumerate(larguras, 1):
     pc.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
@@ -118,15 +120,17 @@ for r in range(PRIMEIRA, ULTIMA + 1):
     k = r - PRIMEIRA
     pc.cell(r, 1, f"={INI}+INT((ROW()-{PRIMEIRA})/{len(REFEICOES)})").number_format = "dd/mm (ddd)"
     pc.cell(r, 2, REFEICOES[k % len(REFEICOES)])
-    for col in range(1, 8):
+    for col in range(1, len(colunas) + 1):
         c = pc.cell(r, col)
         c.border = borda
         c.font = f_neg if col <= 2 else f_txt
-        c.alignment = esq if col in (5, 7) else Alignment(horizontal="center", vertical="center")
+        c.alignment = esq if col in (5, 7, 13) else Alignment(horizontal="center", vertical="center")
         c.fill = fill(FIXO) if col <= 2 else PatternFill()
+    for col in (8, 9, 10):
+        pc.cell(r, col).number_format = "hh:mm"
     pc.cell(r, 2).alignment = Alignment(horizontal="left", vertical="center")
 
-rng = f"C{PRIMEIRA}:G{ULTIMA}"
+rng = f"C{PRIMEIRA}:M{ULTIMA}"
 pc.conditional_formatting.add(
     rng, FormulaRule(formula=[f"MOD(INT((ROW()-{PRIMEIRA})/{len(REFEICOES)}),2)=0"], fill=fill(ENTRADA)))
 pc.conditional_formatting.add(
@@ -140,14 +144,20 @@ dv_ins = DataValidation(type="decimal", operator="between", formula1="0", formul
                         showErrorMessage=True, errorStyle="warning", errorTitle="Confira o valor",
                         error="Digite apenas o número de unidades (ex.: 4 ou 4,5).",
                         showInputMessage=True, promptTitle="Insulina", prompt="Unidades aplicadas antes da refeição.")
-for dv in (dv_gli, dv_ins):
+dv_carbo = DataValidation(type="decimal", operator="between", formula1="0", formula2="250", allow_blank=True,
+                          showErrorMessage=True, errorStyle="warning", errorTitle="Confira o valor",
+                          error="Digite os carboidratos em gramas (ex.: 45).")
+dv_local = DataValidation(type="list", formula1='"Barriga esq.,Barriga dir.,Braço esq.,Braço dir.,Coxa esq.,Coxa dir.,Nádega esq.,Nádega dir."', allow_blank=True)
+for dv in (dv_gli, dv_ins, dv_carbo, dv_local):
     pc.add_data_validation(dv)
 dv_gli.add(f"C{PRIMEIRA}:C{ULTIMA}")
 dv_gli.add(f"F{PRIMEIRA}:F{ULTIMA}")
 dv_ins.add(f"D{PRIMEIRA}:D{ULTIMA}")
+dv_carbo.add(f"K{PRIMEIRA}:K{ULTIMA}")
+dv_local.add(f"L{PRIMEIRA}:L{ULTIMA}")
 
 pc.freeze_panes = "C2"
-pc.auto_filter.ref = f"A1:G{ULTIMA}"
+pc.auto_filter.ref = f"A1:M{ULTIMA}"
 pc.sheet_properties.tabColor = "F2B705"
 pc.page_setup.orientation = "landscape"
 pc.page_setup.paperSize = 9
