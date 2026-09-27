@@ -55,6 +55,8 @@
   function mergeRecordMaps(current,incoming){
     const a=recordMap(current),b=recordMap(incoming),out=Object.assign({},a);
     Object.entries(b).forEach(([key,value])=>{
+      // Registro apagado na cópia chega como null: restaurar nunca apaga o que existe aqui.
+      if(!value)return;
       const old=a[key];
       if(!old||(+value.atualizadoEm||0)>(+old.atualizadoEm||0))out[key]=value;
     });

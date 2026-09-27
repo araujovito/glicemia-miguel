@@ -100,3 +100,12 @@ test("leituras do sensor são unidas sem duplicar",()=>{
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);
   assert.deepEqual(L.mergeSensor(a,b),{min:[60,75,90],mg:[105,110,130],tipo:[0,0,1]});
 });
+
+test("restaurar cópia com refeição apagada (null) não falha nem apaga a atual",()=>{
+  const atual={data:"2026-09-20",atualizadoEm:5,refeicoes:{cafe:{antes:100,atualizadoEm:5}}};
+  const copia={data:"2026-09-20",atualizadoEm:9,refeicoes:{cafe:null,almoco:{antes:120,atualizadoEm:9}},hipos:{h1:null}};
+  const m=L.mergeDayRecords(atual,copia);
+  assert.equal(m.refeicoes.cafe.antes,100);
+  assert.equal(m.refeicoes.almoco.antes,120);
+  assert.equal(m.hipos.h1,undefined);
+});
