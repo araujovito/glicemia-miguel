@@ -299,6 +299,9 @@ input.in{height:48px}
   function dayTags(iso){const t=new Set();MEALS.forEach(x=>{const m=mealOf(iso,x.k);(m&&m.tags||[]).forEach(g=>t.add(g))});return [...t]}
   function extraValor(x){return x.lo?"LO":x.hi?"HI":has(x.valor)?fmt(+x.valor):"–"}
   function nowHHMM(){const d=new Date();return pad(d.getHours())+":"+pad(d.getMinutes())}
+  // Quem criou e quem alterou por último: só o id opaco da plataforma (nunca o nome, que muda e varia por quem vê).
+  // Sem identidade (modo local, visitante sem conta), nada é gravado.
+  function autoria(prev){const o={};const c=prev.criadoPor||S.uid;if(c)o.criadoPor=c;if(S.uid)o.atualizadoPor=S.uid;return o}
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
   const $ = id=>document.getElementById(id);
@@ -362,6 +365,7 @@ input.in{height:48px}
     window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
     window.claude.use("user").then(u=>{
       if(!u)return;S.user=u;
+      u.id().then(id=>{S.uid=id});
       // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
       u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
     }).catch(()=>{});
@@ -869,7 +873,7 @@ input.in{height:48px}
     const h={id:id||("h"+Date.now().toString(36)),hora:$("h-hora").value,valor:lo?null:parseNum($("h-valor").value),lo:lo||null,
       situacao:sit?sit.value:"",sintomas:[...document.querySelectorAll('input[name="h-sin"]:checked')].map(i=>i.value),
       tratamento:$("h-trat").value.trim(),nova:parseNum($("h-nova").value),novaHora:$("h-novahora").value,obs:$("h-obs").value.trim(),
-      criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
+      criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now(),...autoria(prev)};
     const clean={};Object.entries(h).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
     writeDay(iso,{tipo:"hipo",chave:clean.id,valor:clean});
   }
@@ -919,7 +923,7 @@ input.in{height:48px}
     const {iso,id}=S.editing, prev=(id&&extrasOf(iso).find(e=>e.id===id))||{};
     const lo=$("x-lo").checked, hi=$("x-hi").checked, mom=document.querySelector('input[name="x-mom"]:checked');
     const x={id:id||("x"+Date.now().toString(36)),hora:$("x-hora").value,valor:lo||hi?null:parseNum($("x-valor").value),lo:lo||null,hi:hi||null,
-      momento:mom?mom.value:"",obs:$("x-obs").value.trim(),criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()};
+      momento:mom?mom.value:"",obs:$("x-obs").value.trim(),criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now(),...autoria(prev)};
     const clean={};Object.entries(x).forEach(([a,b])=>{if(has(b))clean[a]=b});
     writeDay(iso,{tipo:"extra",chave:clean.id,valor:clean});
   }
@@ -1034,7 +1038,7 @@ input.in{height:48px}
              fotos:d?d.cur.slice():(prev.fotos||[])};
     if(has(m.antes))m.antesEm=has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null);
     const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
-    const valor=mealFilled(clean)?Object.assign(clean,{atualizadoEm:Date.now()}):null;
+    const valor=mealFilled(clean)?Object.assign(clean,{criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()},autoria(prev)):null;
     S.fotoDraft=null;
     const ok=await writeDay(iso,{tipo:"refeicao",chave:k,valor});
     if(d){const kept=valor&&valor.fotos||[];
