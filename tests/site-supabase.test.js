@@ -1,5 +1,5 @@
 "use strict";
-// Testes do site fora do Claude, contra um Supabase de verdade rodando localmente (Postgres,
+// Testes do site contra um Supabase de verdade rodando localmente (Postgres,
 // autenticação, API e tempo real). Cada pessoa abre o site num navegador separado.
 // O login do Google não existe no ambiente local: as contas de teste entram com senha pela API,
 // e a sessão é colocada no navegador antes de abrir o site, como o Google faria.

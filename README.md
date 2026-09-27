@@ -16,8 +16,8 @@ O projeto tem duas partes, que funcionam de forma independente:
 ```
 site/index.html                                 Site (HTML, CSS e a interface, sem build)
 site/logic.js                                   Funções puras (cálculos, junções, validação), testáveis sem navegador
-site/sw.js, manifest.webmanifest, icon.svg      Instalação como aplicativo, só fora do Claude
-site/supabase.js, config.js, vendor/            Banco fora do Claude (Supabase), login Google e convites
+site/sw.js, manifest.webmanifest, icon.svg      Instalação como aplicativo e abertura sem internet
+site/supabase.js, config.js, vendor/            Ligação com o banco (Supabase), login Google e convites
 supabase/migrations/                            Tabelas, regras de acesso (RLS) e funções do banco Postgres
 supabase/tests/                                 Testes das regras de acesso (pgTAP)
 tests/                                          Testes: lógica, navegador (modo local), modo compartilhado e Supabase
@@ -79,33 +79,19 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 
 ### Onde os dados ficam
 
-O site roda de três jeitos, escolhidos sozinhos ao abrir:
+Os registros ficam num banco **Postgres no Supabase**, com login Google e convites por e-mail. O projeto do Supabase deve ser criado numa conta pessoal, na região de São Paulo (passo a passo abaixo).
 
-1. **No Claude**, como Artifact: usa o banco da plataforma (abaixo).
-2. **Fora do Claude, com Supabase**: quando `site/config.js` aponta para um projeto, os dados ficam num banco Postgres, com login Google e convites por e-mail. Veja [Usar fora do Claude](#usar-fora-do-claude-supabase).
-3. **Modo local**: sem nenhum dos dois, os dados ficam só naquele navegador.
+Se `site/config.js` estiver vazio, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. Serve para testar. PDF, CSV e cópia de segurança são baixados pelo próprio navegador.
 
-No Claude, o site usa as capacidades da plataforma por meio de `window.claude.use(...)`:
-
-| Capacidade | Uso |
-|---|---|
-| `db` | Um registro por dia (`dias/AAAA-MM-DD`), o nome da criança (`config/crianca`) e o plano da equipe médica (`config/plano`) |
-| `downloads` | Baixar o PDF, o CSV e a cópia de segurança |
-| `user` (escopo `profile`) | Saber quem está registrando, mostrar o nome de quem anotou e saber se a pessoa pode editar |
-
-Se essas capacidades não estiverem disponíveis e não houver Supabase configurado, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
+A primeira versão rodava como Artifact do Claude. O diário saiu de lá para que os dados de saúde da criança fiquem num projeto da própria família, com login e regras de acesso próprias, sem depender de uma conta de terceiros.
 
 ### Como usar
 
-- **Testar no computador:** abra `site/index.html` no navegador. Ele roda em modo local.
-- **Usar de verdade:** publique como Artifact no claude.ai com as capacidades `db`, `downloads` e `user`, e **publique o `logic.js` junto**, como arquivo de apoio no mesmo caminho relativo (`logic.js`, ao lado da página). Se só o `index.html` for publicado, o site mostra um aviso de que falta o `logic.js` e não carrega. Mantenha a regra de acesso do banco já publicada (`read`/`write` em `interact`). O `sw.js`, o manifesto e o ícone não precisam ir: dentro do Claude, o site não registra o service worker. Depois é só abrir o link no celular.
-- **Compartilhar com a família:** compartilhe o Artifact pelo claude.ai.
-  - Quem vai registrar precisa de permissão para **editar**.
-  - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
-  - O banco é publicado com a regra `read: "interact", write: "interact"`. Por ela, só quem pode participar (Contributor ou acima) lê os registros. Quem recebe o link só para ver abre um diário vazio. Isso é proposital, porque são dados de saúde de uma criança.
-  - Para a equipe médica, mande o **relatório em PDF** em vez do link.
+- **Testar no computador:** abra `site/index.html` no navegador. Ele roda em modo local. Para testar com banco, use o Supabase local (abaixo).
+- **Usar de verdade:** siga o passo a passo abaixo uma vez e mande o endereço do site para a família. Cada pessoa entra com a própria conta Google, e é assim que o site sabe quem anotou cada coisa.
+- **Equipe médica:** pode entrar como leitor, ou receber o **relatório em PDF**.
 
-### Usar fora do Claude (Supabase)
+### Configurar o banco (Supabase)
 
 O site conversa direto com o banco, sem um servidor próprio. Quem protege os dados são as regras de Row Level Security em `supabase/migrations/`. A chave pública do site só consegue fazer o que essas regras permitem:
 
@@ -124,9 +110,7 @@ Passo a passo, uma vez só:
    - Em Authentication → URL Configuration, coloque o endereço do site em *Site URL* e em *Redirect URLs*.
 4. **Aponte o site para o projeto:** em `site/config.js`, preencha `supabaseUrl` e `supabaseAnonKey` com a URL e a chave pública do projeto (Project Settings → API; a "anon" ou a "publishable"). **Nunca** use a chave `service_role` ou `secret`.
 5. **Publique a pasta `site/`** num serviço de site estático com HTTPS, por exemplo Cloudflare Pages ou Netlify. Os dois publicam a partir de repositório privado. O GitHub Pages só faz isso no plano pago.
-6. **Primeiro acesso:** entre com a sua conta, toque em "Criar um diário" e convide os outros cuidadores. Para trazer o que já está no Claude, baixe a cópia de segurança lá e use "Restaurar de uma cópia" no site novo. A autoria dos registros restaurados fica com quem restaurou, porque as contas do Claude não existem no Supabase.
-
-O Claude continua funcionando como antes. `config.js` não é publicado no Artifact, então lá o site nem tenta o Supabase.
+6. **Primeiro acesso:** entre com a sua conta, toque em "Criar um diário" e convide os outros cuidadores. Para trazer registros de uma cópia de segurança (por exemplo, da versão antiga no Claude), use "Restaurar de uma cópia" no Resumo. A autoria dos registros restaurados fica com quem restaurou, porque as contas antigas não existem no Supabase.
 
 Para desenvolver com um Supabase local (precisa de Docker):
 
@@ -195,7 +179,7 @@ npm run test:supabase       # site contra um Supabase local (pulado se ele não 
 npm run test:banco          # regras de acesso do banco, pgTAP (precisa do Supabase local)
 ```
 
-Os testes do modo compartilhado simulam o banco do Claude com as mesmas regras do real (update mescla e exige que o documento exista) e seguram a entrega das gravações, para reproduzir dois aparelhos salvando ao mesmo tempo.
+Os testes do modo compartilhado simulam o banco com a interface do `supabase.js` (update mescla os registros enviados) e seguram a entrega das gravações, para reproduzir dois aparelhos salvando ao mesmo tempo.
 
 Os testes do Supabase usam um banco de verdade: cada pessoa (dona, cuidadora, leitor, alguém sem convite) abre o site num navegador separado. Como o Google não existe no ambiente local, as contas de teste entram com senha, e a sessão é colocada no navegador antes de o site abrir.
 
@@ -205,20 +189,20 @@ O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 
 - **Não sugere nada de tratamento.** O site registra e resume, mas não calcula dose, não define meta e não classifica um valor como "bom" ou "ruim". O plano para hipoglicemia é texto livre, escrito pela família conforme a orientação da equipe médica.
 - **O site fala direto com o banco, e a segurança está no Postgres.** Um servidor próprio seria mais uma coisa para manter e atualizar. Com Row Level Security, cada regra (quem lê, quem grava, quem apaga tudo) fica no banco e é testada em `supabase/tests`. MongoDB e SQLite foram descartados por isso: nenhum dos dois oferece acesso seguro direto do navegador sem uma API no meio.
-- **Tabelas separadas, mas o site continua vendo "um dia".** Refeições, hipoglicemias, medições extras e leituras do sensor têm tabelas próprias, com limites de valor. As funções `gravar_dia` e `ler_dias` traduzem para o mesmo objeto do banco do Claude. Por isso `site/supabase.js` imita a interface do Claude e o resto do site é igual nos dois modos.
+- **Tabelas separadas, mas o site continua vendo "um dia".** Refeições, hipoglicemias, medições extras e leituras do sensor têm tabelas próprias, com limites de valor. As funções `gravar_dia` e `ler_dias` traduzem as tabelas para um objeto por dia. Esse formato veio da primeira versão, no Claude, e foi mantido: com ele, a troca de banco mexeu só em `site/supabase.js` e no início do `index.html`.
 - **Sem fotos dos pratos.** Houve uma versão com até 3 fotos por refeição, mas ela foi retirada: exigia compressão, envio, limpeza das imagens órfãs e cópia em base64, e seria a parte mais trabalhosa de levar o diário para outro banco (um armazenamento de arquivos com regras próprias). O texto de "O que comeu" e as etiquetas já cumprem o papel. Refeições e cópias antigas com o campo `fotos` continuam válidas e o campo é ignorado.
-- **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
+- **Um arquivo só, sem build.** O site é um HTML com dois scripts próprios (`logic.js` e `supabase.js`) e funciona aberto direto ou publicado em qualquer hospedagem estática. A biblioteca do Supabase vai junto em `site/vendor/`. A única externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
 - **O CSV segue as colunas da planilha Excel.** As 7 primeiras colunas preservam o formato antigo; depois vêm os três horários, carboidratos, local da aplicação e etiquetas, na mesma ordem da planilha.
-- **Cada gravação envia só o que mudou.** O site usa `update`, que mescla, em vez de regravar o dia inteiro. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. O banco não tem transações, então duas pessoas editando *a mesma* refeição ao mesmo tempo continuam no "último a salvar vence".
+- **Cada gravação envia só o que mudou.** Cada refeição, hipoglicemia ou medição é uma linha própria, e salvar grava só aquela linha. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. Se duas pessoas editam *a mesma* refeição ao mesmo tempo, o site avisa do conflito; quem salvar por último, depois do aviso, vence.
 - **"Das outras vezes" só mostra, não julga.** A busca compara palavras: ignora acentos e palavras como "com" e "copo", e trata plurais simples. As refeições vêm ordenadas pela semelhança. Não há cor de "bom" ou "ruim", pela mesma regra de não definir metas.
 - **Perfis sem metas.** O perfil por refeição e o AGP mostram mediana, faixas de percentis, coeficiente de variação e desvio padrão, sem faixa-alvo, tempo no alvo (TIR) ou GMI. Os dois primeiros dependem de metas que só a equipe médica define. O GMI estimaria a hemoglobina glicada, que o projeto decidiu não estimar. As faixas de 25–75% só aparecem com 4 medições ou mais (5 por hora no AGP), e buracos nos dados interrompem as linhas em vez de inventar valores.
 - **Carboidratos e locais são só registro.** O site não relaciona carboidrato com insulina (razão insulina:carboidrato, dose) e não indica o próximo local de aplicação.
 - **Sensor pelo arquivo, não por integração.** O LibreView não tem uma API aberta para famílias, e o CSV é a exportação oficial. O leitor localiza as colunas pela posição em relação a "tipo de registro", e não pelo nome de cada uma, para não depender da tradução.
-- **A cópia de segurança fica com a família.** Os registros moram num único Artifact, ligado a uma conta. A cópia existe para que o histórico não dependa dessa conta.
+- **A cópia de segurança fica com a família.** Os registros moram num único projeto do Supabase, ligado a uma conta. A cópia existe para que o histórico não dependa dessa conta.
 
 ## Privacidade
 
-- Este repositório é **privado** e contém só o código e os modelos vazios. **Nenhum dado de saúde fica aqui.** Os registros ficam no armazenamento do Artifact ou no navegador.
+- Este repositório é **privado** e contém só o código e os modelos vazios. **Nenhum dado de saúde fica aqui.** Os registros ficam no banco do Supabase ou no navegador (modo local).
 - Não coloque aqui exportações (CSV ou PDF), fotos, capturas de tela com registros nem planilhas preenchidas. O `.gitignore` bloqueia esses formatos. As únicas planilhas aceitas são os dois modelos vazios da pasta `planilha/`.
 - Para usar a planilha, faça uma cópia **fora** da pasta do projeto e preencha a cópia. Assim o modelo versionado continua vazio.
 - O arquivo da cópia de segurança (`copia-glicemia-*.json`) tem os dados de saúde da criança. Guarde num lugar privado. O `.gitignore` bloqueia esse nome de arquivo, mas o mais seguro é nunca salvar a cópia dentro da pasta do repositório.

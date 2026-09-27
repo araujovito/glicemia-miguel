@@ -1,5 +1,5 @@
 "use strict";
-// Testes do site no modo compartilhado (Artifact do Claude): várias pessoas, um banco só.
+// Testes do site no modo compartilhado: várias pessoas, um banco só (simulado com a interface do supabase.js).
 // O banco é simulado no Node com as regras do real: set substitui, update mescla objetos
 // e exige que o documento exista, e toda gravação chega a todos os aparelhos abertos.
 const test=require("node:test");
@@ -27,7 +27,7 @@ async function entrega(){
   const docs=Object.fromEntries(store);
   for(const p of pages)await p.evaluate(d=>window.__entrega&&window.__entrega(d),docs).catch(()=>{});
 }
-const CLAUDE_SIMULADO=`(()=>{
+const BANCO_SIMULADO=`(()=>{
   let docs={};const ouvintes=[];
   window.__entrega=d=>{docs=d;ouvintes.forEach(f=>f())};
   const snap=(id,v)=>({id,exists:v!==undefined,data:()=>v,metadata:{}});
@@ -40,9 +40,7 @@ const CLAUDE_SIMULADO=`(()=>{
   const user={isOwner:async()=>window.__dono,id:async()=>window.__uid,can:async n=>n==="data.write"?window.__podeEscrever:null,
     me:async()=>({id:window.__uid,name:"",isOwner:window.__dono,canEdit:false,avatarUrl:"",color:"#888",email:null}),
     profiles:async ids=>Object.fromEntries([].concat(ids).map(i=>[i,{id:i,name:i==="u_ana"?"Ana":"João",avatarUrl:"",color:"#888",email:null,isMe:i===window.__uid,guest:false}]))};
-  const downloads={save:async()=>({status:"saved"})};
-  const caps={db,user,downloads};
-  window.claude={use:n=>new Promise(r=>setTimeout(()=>r(caps[n]||null),20))};
+  window.__bancoDeTeste={db,user};
 })();`;
 
 async function abrir({uid,dono=false,podeEscrever=true,somenteLeitura=false}){
@@ -54,7 +52,7 @@ async function abrir({uid,dono=false,podeEscrever=true,somenteLeitura=false}){
     if(nome==="update"){if(!store.has(a[0]))return {erro:"invalid_argument"};mescla(store.get(a[0]),a[1]);await entrega();return null}
     if(nome==="delete"){store.delete(a[0]);await entrega();return null}
   });
-  await page.addInitScript(`window.__uid=${JSON.stringify(uid)};window.__dono=${dono};window.__podeEscrever=${podeEscrever};`+CLAUDE_SIMULADO);
+  await page.addInitScript(`window.__uid=${JSON.stringify(uid)};window.__dono=${dono};window.__podeEscrever=${podeEscrever};`+BANCO_SIMULADO);
   await page.goto(baseUrl+"/site/index.html",{waitUntil:"domcontentloaded"});
   pages.push(page);await entrega();
   await page.locator('button[data-meal="cafe"]').waitFor();

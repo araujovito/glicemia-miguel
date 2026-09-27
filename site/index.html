@@ -210,7 +210,7 @@ input[type=time].in{font-family:var(--mono);font-size:1.2rem;height:54px}
 .restore-plan{margin:8px 0 0;padding-left:18px;font-size:.9rem;display:grid;gap:4px}
 .empty-line{color:var(--muted);font-size:.88rem;margin:8px 0 0}
 
-/* conta e pessoas com acesso (fora do Claude) */
+/* conta e pessoas com acesso */
 .conta{margin-top:12px}
 .pessoas{list-style:none;padding:0;margin:10px 0 0;display:grid;gap:8px}
 .pessoas li{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--line);padding-top:8px}
@@ -294,7 +294,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  // logic.js é um arquivo separado. Se ele não foi publicado junto (Artifact publicado só com o index.html),
+  // logic.js é um arquivo separado. Se ele não foi publicado junto com o index.html,
   // a tela ficaria em branco; em vez disso, explica o que falta.
   if(!window.GlicemiaLogic){
     document.getElementById("view").innerHTML='<div class="banner" role="alert">O site não carregou por completo: falta o arquivo <b>logic.js</b>, que precisa ser publicado junto com o index.html. Os registros não foram afetados.</div>';
@@ -517,16 +517,12 @@ input.in{height:48px}
     if(DEMO){S.mode="demo";S.readOnly=true;loadDemo();render();return}
     let settled=false;
     const fallback=()=>{if(settled)return;settled=true;S.mode="local";loadLocal();render()};
-    const use=window.claude&&window.claude.use;
-    if(!use){iniciarForaDoClaude().then(usou=>{if(!usou)fallback()},fallback);return}
-    window.claude.use("db").then(db=>{
-      if(!db){fallback();return}
-      settled=true;ligarBanco(db);
-    }).catch(fallback);
-    window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
-    window.claude.use("user").then(u=>{if(u)ligarUsuario(u)}).catch(()=>{});
+    // Os testes do modo compartilhado entregam aqui um banco simulado com a mesma interface do supabase.js.
+    const teste=window.__bancoDeTeste;
+    if(teste){settled=true;ligarBanco(teste.db);ligarUsuario(teste.user);return}
+    iniciarSupabase().then(usou=>{if(!usou)fallback()},fallback);
   }
-  // Mesmo código para o banco do Claude e para o Supabase: supabase.js imita a interface do Claude.
+  // Interface do banco (supabase.js): doc/collection com onSnapshot, set, update e delete, por documento do dia.
   function ligarBanco(db){
     S.db=db;S.mode="db";render();
     db.collection("dias").onSnapshot(snap=>{
@@ -547,18 +543,18 @@ input.in{height:48px}
     u.id().then(id=>{S.uid=id});
     u.isOwner().then(v=>{S.isOwner=v;if(S.tab==="resumo"&&!S.editing)renderView()});
     fillNames();
-    // false = a plataforma confirma que esta pessoa só pode ver; null = não informou, e a gravação recusada decide.
+    // false = esta pessoa só pode ver (leitor); a gravação recusada pelo banco também marca somente leitura.
     u.can("data.write").then(c=>{if(c===false&&!S.readOnly){S.readOnly=true;render()}});
   }
 
-  /* ---------- fora do Claude: Supabase com login Google ---------- */
+  /* ---------- banco: Supabase com login Google ---------- */
   // config.js diz qual projeto usar. Sem ele, ou com os campos vazios, o site fica no modo local.
   const SUPABASE_JS="vendor/supabase-js-2.117.2.js";
-  async function iniciarForaDoClaude(){
+  async function iniciarSupabase(){
     try{await loadScript("config.js")}catch(e){return false}
     const cfg=window.DIARIO_CONFIG||{};
     if(!cfg.supabaseUrl||!cfg.supabaseAnonKey)return false;
-    S.backend="supabase";render();
+    render();
     try{
       await loadScript(SUPABASE_JS);await loadScript("supabase.js");
       S.sb=window.DiarioSupabase.iniciar(cfg);
@@ -646,7 +642,7 @@ input.in{height:48px}
     $("gotoday").hidden=S.date===todayIso();
     const b=$("banner");
     if(S.mode==="demo"){b.hidden=false;b.textContent="Modo de demonstração: todos os nomes, valores e situações desta tela são fictícios. Nada será salvo."}
-    else if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador. Abra pelo link do Claude para salvar na nuvem."}
+    else if(S.mode==="local"){b.hidden=false;b.textContent="Os registros estão sendo salvos só neste aparelho e neste navegador, porque este site não tem um banco configurado (config.js)."}
     else if(S.mode==="offline"){b.hidden=false;b.textContent="Sem conexão com o armazenamento. Recarregue a página antes de registrar."}
     else if(S.readOnly){b.hidden=false;b.textContent="Você não tem permissão para registrar neste diário. Peça a quem compartilhou o acesso de edição."}
     else b.hidden=true;
@@ -1142,9 +1138,7 @@ input.in{height:48px}
       <p class="note" id="bk-msg" role="status"${B.msg?"":" hidden"}>${esc(B.msg||"")}</p>
       <details style="margin-top:18px" ${S.eraseConfirm||S.erasing?"open":""}><summary>Privacidade e exclusão dos dados</summary>
         ${S.mode==="db"
-          ?(S.backend==="supabase"
-            ?`<p class="note">Os registros ficam no banco de dados deste diário, e só as pessoas convidadas por e-mail, depois de entrar com a conta Google, conseguem vê-los. Apagar tudo remove os registros, o sensor, o nome e o plano para todos, em todos os aparelhos; as pessoas com acesso continuam. Faça uma cópia antes.</p>`
-            :`<p class="note">Os registros ficam guardados no Claude, na conta de quem criou este diário, e só as pessoas com quem ele foi compartilhado conseguem vê-los. Apagar tudo remove os dados para todos os cuidadores, em todos os aparelhos. Faça uma cópia antes.</p>`)
+          ?`<p class="note">Os registros ficam no banco de dados deste diário, e só as pessoas convidadas por e-mail, depois de entrar com a conta Google, conseguem vê-los. Apagar tudo remove os registros, o sensor, o nome e o plano para todos, em todos os aparelhos; as pessoas com acesso continuam. Faça uma cópia antes.</p>`
           :`<p class="note">Neste aparelho, os registros ficam no armazenamento do navegador sem uma senha própria. Use um aparelho protegido por senha. Para remover tudo deste diário, faça uma cópia antes.</p>`}
         ${S.mode==="db"&&!S.isOwner?`<p class="note">Só quem criou o diário pode apagar todos os dados.</p>`:S.eraseConfirm?`<div class="confirm" role="alert"><strong>Esta ação não pode ser desfeita.</strong><span>Ela apaga registros, leituras do sensor, nome e plano da equipe médica deste diário. Digite APAGAR para confirmar.</span><input class="in" id="erase-word" autocomplete="off" aria-label="Digite APAGAR para confirmar"><div><button type="button" class="btn" id="erase-cancel">Cancelar</button><button type="button" class="btn danger" id="erase-confirm" disabled>${S.erasing?"Apagando…":"Apagar todos os dados"}</button></div></div>`:
         `<button type="button" class="btn danger" id="erase-start" ${ro?"disabled":""}>Apagar todos os dados deste diário</button>`}
@@ -1728,7 +1722,6 @@ input.in{height:48px}
     setTimeout(()=>URL.revokeObjectURL(url),30000);
   }};
   async function getDownloads(){
-    if(!S.downloads&&window.claude&&window.claude.use){try{S.downloads=await window.claude.use("downloads")}catch(e){}}
     if(!S.downloads&&typeof URL.createObjectURL==="function")S.downloads=browserDownloads;
     S.dlMsg=S.downloads?null:DL_MSG;
     renderView();
@@ -1872,8 +1865,7 @@ input.in{height:48px}
   render();
   startDb();
   // Instalação como aplicativo e abertura sem internet só fazem sentido com o site hospedado por conta própria.
-  // Dentro do Claude (window.claude existe), o Artifact já é servido pela plataforma: não registra service worker.
-  if(!window.claude&&"serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+  if("serviceWorker" in navigator&&(location.protocol==="https:"||location.hostname==="localhost"||location.hostname==="127.0.0.1"))navigator.serviceWorker.register("sw.js").catch(()=>{});
 })();
 </script>
 </body>

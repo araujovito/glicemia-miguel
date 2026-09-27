@@ -1,9 +1,9 @@
-/* Diário de Glicemia fora do Claude: liga o site a um projeto Supabase (Postgres) com login Google.
+/* Diário de Glicemia: liga o site ao banco Supabase (Postgres) com login Google.
 
-   Oferece ao index.html a mesma interface do banco do Claude (doc, collection, onSnapshot, set, update,
-   delete) e da identidade (id, isOwner, can, profiles). Assim o resto do site não precisa saber onde os
-   dados estão. Cada dia vai e volta como um objeto JSON, e as funções gravar_dia e ler_dias do banco
-   (supabase/migrations) traduzem esse objeto para as tabelas refeicoes, hipos e extras.
+   Oferece ao index.html uma interface por documento (doc, collection, onSnapshot, set, update, delete) e
+   de identidade (id, isOwner, can, profiles). Ela veio da primeira versão, que rodava como Artifact do
+   Claude, e continua útil: o site pensa em "um dia" como um objeto JSON, e as funções gravar_dia e
+   ler_dias do banco (supabase/migrations) traduzem esse objeto para as tabelas refeicoes, hipos e extras.
 
    Os outros aparelhos ficam em dia pelo tempo real do Supabase: toda gravação atualiza a linha do dia na
    tabela `dias`, e cada aparelho recarrega o dia que mudou. */

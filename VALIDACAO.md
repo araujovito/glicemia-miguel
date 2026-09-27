@@ -52,7 +52,7 @@ O resultado esperado é nenhum teste com falha. A suíte verifica:
 - [ ] Gerar o PDF e conferir datas, nome, refeições, medições extras e sensor.
 - [ ] Mostrar um exemplo fictício do PDF ou CSV à equipe médica e confirmar se o formato contém o que ela precisa acompanhar.
 
-## 6. Fora do Claude (Supabase), se for usar
+## 6. Banco e acesso (Supabase)
 
 - [ ] Abrir o site sem estar logado e confirmar que nenhum registro aparece antes do login.
 - [ ] Entrar com uma conta Google que não foi convidada e confirmar que nenhum diário aparece.
@@ -60,7 +60,7 @@ O resultado esperado é nenhum teste com falha. A suíte verifica:
 - [ ] Confirmar que o leitor não consegue salvar e que o cuidador não vê "Apagar todos os dados".
 - [ ] Remover uma pessoa e confirmar que, ao recarregar, ela não vê mais o diário.
 - [ ] Registrar num celular com o outro bloqueado. Desbloquear o outro e confirmar que o registro aparece.
-- [ ] Restaurar a cópia de segurança feita no Claude e conferir os dias.
+- [ ] Restaurar a cópia de segurança da versão antiga (Claude), se houver, e conferir os dias.
 
 ## Critério de liberação
 
