@@ -580,11 +580,11 @@ input.in{height:48px}
     const end=todayIso(), start=S.period?addDays(end,-(S.period-1)):"0000-00-00";
     const isos=daysWithData().filter(i=>i>=start&&i<=end);
     const rows=MEALS.map(x=>{
-      const a=[],d=[],ins=[],diff=[];
+      const a=[],d=[],ins=[],diff=[],cb=[];
       isos.forEach(iso=>{const m=mealOf(iso,x.k);if(!m)return;
-        if(has(m.antes))a.push(+m.antes); if(has(m.depois))d.push(+m.depois); if(has(m.insulina))ins.push(+m.insulina);
+        if(has(m.antes))a.push(+m.antes); if(has(m.depois))d.push(+m.depois); if(has(m.insulina))ins.push(+m.insulina); if(has(m.carbo))cb.push(+m.carbo);
         if(has(m.antes)&&has(m.depois))diff.push(m.depois-m.antes);});
-      return {x,na:a.length,nd:d.length,a:avg(a),d:avg(d),ins:avg(ins),diff:avg(diff),da:distrib(a),dd:distrib(d),
+      return {x,na:a.length,nd:d.length,a:avg(a),d:avg(d),ins:avg(ins),diff:avg(diff),da:distrib(a),dd:distrib(d),carbo:avg(cb),nc:cb.length,
               amin:a.length?Math.min(...a):null,amax:a.length?Math.max(...a):null,dmin:d.length?Math.min(...d):null,dmax:d.length?Math.max(...d):null};
     });
     const allA=[],allD=[];
@@ -682,9 +682,9 @@ input.in{height:48px}
       <p class="note" style="margin-top:10px">O PDF traz o período escolhido acima: médias por refeição, dois gráficos e o registro dia a dia.</p></section>`;
     if(S.copyText!=null)h+=`<textarea class="copybox" id="copybox" readonly aria-label="Resumo em texto" style="margin:0 0 12px">${esc(S.copyText)}</textarea>`;
     h+=`<section class="card"><div class="legend"><span><i style="background:var(--accent)"></i>Antes</span><span><i style="background:var(--after)"></i>2h depois</span><span>mg/dL</span></div>${chart(R.rows)}</section>`;
-    h+=`<section class="card" style="margin-top:12px"><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>média</th><th class="num">Antes<br>mín–máx</th><th class="num">2h<br>média</th><th class="num">2h<br>mín–máx</th><th class="num">Variação<br>média</th><th class="num">Insulina<br>média</th><th class="num">Medições</th></tr></thead><tbody>`;
+    h+=`<section class="card" style="margin-top:12px"><div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes<br>média</th><th class="num">Antes<br>mín–máx</th><th class="num">2h<br>média</th><th class="num">2h<br>mín–máx</th><th class="num">Variação<br>média</th><th class="num">Insulina<br>média</th><th class="num">Carbo<br>média (g)</th><th class="num">Medições</th></tr></thead><tbody>`;
     R.rows.forEach(r=>{
-      h+=`<tr><td>${r.x.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${r.na?fmt(r.amin)+"–"+fmt(r.amax):"–"}</td><td class="num">${fmt(r.d)}</td><td class="num">${r.nd?fmt(r.dmin)+"–"+fmt(r.dmax):"–"}</td><td class="num">${r.diff==null?"–":(r.diff>0?"+":"")+fmt(r.diff)}</td><td class="num">${fmt(r.ins,1)}</td><td class="num">${r.na}/${r.nd}</td></tr>`;
+      h+=`<tr><td>${r.x.n}</td><td class="num">${fmt(r.a)}</td><td class="num">${r.na?fmt(r.amin)+"–"+fmt(r.amax):"–"}</td><td class="num">${fmt(r.d)}</td><td class="num">${r.nd?fmt(r.dmin)+"–"+fmt(r.dmax):"–"}</td><td class="num">${r.diff==null?"–":(r.diff>0?"+":"")+fmt(r.diff)}</td><td class="num">${fmt(r.ins,1)}</td><td class="num">${fmt(r.carbo)}</td><td class="num">${r.na}/${r.nd}</td></tr>`;
     });
     h+=`</tbody></table></div><p class="note">Variação média = 2h depois − antes, só nas refeições com as duas medições. Medições = antes/2h.</p></section>`;
     h+=perfilCard(R);
@@ -715,7 +715,7 @@ input.in{height:48px}
     if(R.cv!=null)t+=`Variabilidade: coeficiente de variação ${fmt(R.cv)}% · desvio padrão ${fmt(R.dp)} mg/dL\n`;
     t+=`\n`;
     R.rows.forEach(r=>{if(!r.na&&!r.nd)return;
-      t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un\n`;
+      t+=`${r.x.n}: antes ${fmt(r.a)} (${r.na} med.) · 2h ${fmt(r.d)} (${r.nd} med.) · insulina média ${fmt(r.ins,1)} un${r.nc?` · carboidratos em média ${fmt(r.carbo)} g`:""}\n`;
       [[r.da,"antes"],[r.dd,"2h"]].forEach(([d,l])=>{if(d&&d.n>=MIN_CAIXA)t+=`  ${l}: mediana ${fmt(d.med)}, metade central ${fmt(d.p25)}–${fmt(d.p75)}, de ${fmt(d.min)} a ${fmt(d.max)}\n`});});
     if(R.tags.length){t+=`\nRefeições com etiqueta:\n`;R.tags.forEach(r=>{t+=`- ${r.t}: ${r.n} refeições · antes ${fmt(r.a)} · 2h ${fmt(r.d)}\n`})}
     if(R.extras.length){t+=`\nOutras medições: ${R.extras.length}\n`;R.extras.forEach(x=>{t+=`- ${fmtDM.format(parseIso(x.iso))} ${x.hora||""}: ${extraValor(x)}${x.lo||x.hi||!has(x.valor)?"":" mg/dL"}${x.momento?" · "+x.momento:""}${has(x.obs)?" · "+x.obs:""}\n`})}
@@ -727,15 +727,15 @@ input.in{height:48px}
   function csv(){
     const q=v=>{v=String(v??"");return /[;"\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
     const n=(v,d)=>has(v)?Number(v).toLocaleString("pt-BR",{maximumFractionDigits:d||0,useGrouping:false}):"";
-    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas"].join(";")];
+    const lines=[["Data","Refeição","Glicemia antes (mg/dL)","Insulina (unidades)","O que comeu e bebeu","Glicemia 2h depois (mg/dL)","Observações","Etiquetas","Carboidratos (g)"].join(";")];
     daysWithData().reverse().forEach(iso=>MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", ")].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),x.n,n(m.antes),n(m.insulina,1),m.comeu,n(m.depois),m.obs,(m.tags||[]).join(", "),n(m.carbo,1)].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>extrasOf(iso).forEach(x=>{
-      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"",""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Medição extra ("+[x.hora,x.momento].filter(Boolean).join(" - ")+")",x.lo?"LO":x.hi?"HI":n(x.valor),"","","",x.obs||"","",""].map(q).join(";"));}));
     daysWithData().reverse().forEach(iso=>hiposOf(iso).forEach(x=>{
       const det=[x.situacao&&"Situação: "+x.situacao,(x.sintomas||[]).length&&"Sintomas: "+x.sintomas.join(", "),has(x.tratamento)&&"Feito: "+x.tratamento,
         has(x.nova)&&"Nova medição: "+n(x.nova)+" mg/dL"+(x.novaHora?" às "+x.novaHora:""),has(x.obs)&&x.obs].filter(Boolean).join(" | ");
-      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,""].map(q).join(";"));}));
+      lines.push([fmtDM.format(parseIso(iso)),"Hipoglicemia ("+(x.hora||"")+")",x.lo?"LO":n(x.valor),"","","",det,"",""].map(q).join(";"));}));
     return "﻿"+lines.join("\r\n");
   }
 
@@ -898,9 +898,9 @@ input.in{height:48px}
     // tabela por refeição
     doc.setFont("helvetica","bold");doc.setFontSize(11);doc.setTextColor(...C.ink);doc.text("Médias por refeição",M,63);
     table(doc,{startY:66,margin:{left:M,right:M},theme:"grid",
-      head:[["Refeição","Antes\nmédia","Antes\nmín-máx","2h depois\nmédia","2h depois\nmín-máx","Variação\nmédia","Insulina\nmédia (un.)","Medições\nantes/2h"]],
+      head:[["Refeição","Antes\nmédia","Antes\nmín-máx","2h depois\nmédia","2h depois\nmín-máx","Variação\nmédia","Insulina\nmédia (un.)","Carbo\nmédia (g)","Medições\nantes/2h"]],
       body:R.rows.map(r=>[r.x.n,n0(r.a),r.na?n0(r.amin)+"-"+n0(r.amax):"-",n0(r.d),r.nd?n0(r.dmin)+"-"+n0(r.dmax):"-",
-        r.diff==null?"-":(r.diff>0?"+":"")+n0(r.diff),n1(r.ins),r.na+"/"+r.nd]),
+        r.diff==null?"-":(r.diff>0?"+":"")+n0(r.diff),n1(r.ins),n0(r.carbo),r.na+"/"+r.nd]),
       styles:{font:"helvetica",fontSize:8.5,cellPadding:1.8,lineColor:C.line,textColor:C.ink,halign:"center"},
       headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold",fontSize:7.5},
       columnStyles:{0:{halign:"left",fontStyle:"bold"}}});
@@ -991,13 +991,13 @@ input.in{height:48px}
     const body=[],dayIdx=[];
     R.isos.slice().reverse().forEach((iso,di)=>{let first=true;
       MEALS.forEach(x=>{const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",m.comeu||"",[(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
+        body.push([first?shortDate(iso):"",x.n,has(m.antes)?n0(+m.antes):"-",has(m.insulina)?n1(+m.insulina):"-",has(m.depois)?n0(+m.depois):"-",has(m.carbo)?n1(+m.carbo):"-",m.comeu||"",[(m.tags||[]).join(", "),m.obs,(m.fotos||[]).length?"com foto no site":""].filter(Boolean).join(" · ")]);
         dayIdx.push(di);first=false})});
     table(doc,{startY:y+3,margin:{left:M,right:M,bottom:18},theme:"plain",
-      head:[["Data","Refeição","Antes","Insul.","2h dep.","O que comeu e bebeu","Observações"]],body,
+      head:[["Data","Refeição","Antes","Insul.","2h dep.","Carbo (g)","O que comeu e bebeu","Observações"]],body,
       styles:{font:"helvetica",fontSize:7.8,cellPadding:1.5,textColor:C.ink,valign:"top"},
       headStyles:{fillColor:C.accent,textColor:255,fontStyle:"bold"},
-      columnStyles:{0:{cellWidth:20,fontStyle:"bold"},1:{cellWidth:24},2:{cellWidth:12,halign:"center"},3:{cellWidth:11,halign:"center"},4:{cellWidth:13,halign:"center"},6:{cellWidth:36,textColor:C.muted}},
+      columnStyles:{0:{cellWidth:20,fontStyle:"bold"},1:{cellWidth:24},2:{cellWidth:12,halign:"center"},3:{cellWidth:11,halign:"center"},4:{cellWidth:13,halign:"center"},5:{cellWidth:13,halign:"center"},7:{cellWidth:34,textColor:C.muted}},
       didParseCell:d=>{if(d.section==="body"&&dayIdx[d.row.index]%2===1)d.cell.styles.fillColor=C.soft2},
       willDrawCell:d=>{if(d.section==="body"&&d.row.cells[0].raw&&d.row.index>0){doc.setDrawColor(...C.line);doc.setLineWidth(0.3);doc.line(d.cell.x,d.cell.y,d.cell.x+d.cell.width,d.cell.y)}}});
 
