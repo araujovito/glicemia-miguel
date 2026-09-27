@@ -33,6 +33,12 @@
     return (+((current&&current.atualizadoEm)||0))>(+(baseline||0));
   }
 
+  async function optimisticCommit(apply,rollback,save){
+    apply();
+    try{await save();return true}
+    catch(error){rollback();throw error}
+  }
+
   function mergeSensor(atual,novos){
     const m=new Map();
     if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+((atual.tipo||[])[i]||0),{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
@@ -42,5 +48,5 @@
     return {min:a.map(x=>x.min),mg:a.map(x=>x.mg),tipo:a.map(x=>x.tipo)};
   }
 
-  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,mergeSensor};
+  return {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeSensor};
 });

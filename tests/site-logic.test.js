@@ -32,6 +32,21 @@ test("edição concorrente é detectada pela versão do registro",()=>{
   assert.equal(L.recordChanged({atualizadoEm:10},10),false);
 });
 
+test("salvamento otimista mantém a alteração quando funciona",async()=>{
+  let value="antigo";
+  await L.optimisticCommit(()=>{value="novo"},()=>{value="antigo"},async()=>{});
+  assert.equal(value,"novo");
+});
+
+test("salvamento otimista restaura o estado quando falha",async()=>{
+  let value="antigo";
+  await assert.rejects(
+    L.optimisticCommit(()=>{value="novo"},()=>{value="antigo"},async()=>{throw new Error("sem rede")}),
+    /sem rede/
+  );
+  assert.equal(value,"antigo");
+});
+
 test("leituras do sensor são unidas sem duplicar",()=>{
   const a={min:[60,75],mg:[100,110],tipo:[0,0]};
   const b=new Map([[600,{min:60,mg:105,tipo:0}],[901,{min:90,mg:130,tipo:1}]]);

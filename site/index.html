@@ -303,7 +303,7 @@ input.in{height:48px}
 <script>
 (function(){
   "use strict";
-  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,mergeSensor}=window.GlicemiaLogic;
+  const {has,parseNum,avg,percentil,desvio,distrib,palavras,isoTime,recordChanged,optimisticCommit,mergeSensor}=window.GlicemiaLogic;
   const MEALS = [
     {k:"cafe",   n:"Café da manhã", s:"Café",   from:5,  to:9.5},
     {k:"lanche", n:"Lanche",        s:"Lanche", from:9.5,to:11.5},
@@ -1661,6 +1661,16 @@ input.in{height:48px}
   function openHipo(iso,id){const x=(id&&hiposOf(iso).find(h=>h.id===id))||{};S.editing={kind:"hipo",iso,id:id||null,baseUpdated:+x.atualizadoEm||0};renderSheet()}
   function closeEditor(){S.editing=null;renderSheet();renderView()}
 
+  function setEditorSaving(saving){
+    if(S.editing)S.editing.saving=saving;
+    const form=$("form")||$("hform")||$("xform");if(!form)return;
+    form.setAttribute("aria-busy",saving?"true":"false");
+    form.querySelectorAll("button,input,textarea").forEach(el=>{
+      if(saving){el.dataset.disabledBefore=el.disabled?"1":"0";el.disabled=true}
+      else if(el.dataset.disabledBefore!==undefined){el.disabled=el.dataset.disabledBefore==="1";delete el.dataset.disabledBefore}
+    });
+  }
+
   // Mapa {id: registro} a partir do formato atual ou da lista antiga.
   function asMap(v){if(Array.isArray(v)){const o={};v.forEach(x=>{if(x&&x.id)o[x.id]=x});return o}return Object.assign({},v||{})}
   const CAMPO={refeicao:"refeicoes",hipo:"hipos",extra:"extras"};
@@ -1675,15 +1685,23 @@ input.in{height:48px}
     const parte=Array.isArray(had&&had[campo])?mapa:{[change.chave]:change.valor||null};
     const delta={[campo]:parte,data:iso,atualizadoEm:agora};
     const vazio=!Object.values(next.refeicoes||{}).some(Boolean)&&!listOf(next.hipos).length&&!listOf(next.extras).length;
-    if(vazio&&S.mode!=="db")S.days.delete(iso);else S.days.set(iso,next);
-    closeEditor();
-    try{await persist(iso,next,delta);toast(change.valor?"Registro salvo":"Registro apagado");return true}
+    const apply=()=>{if(vazio&&S.mode!=="db")S.days.delete(iso);else S.days.set(iso,next)};
+    const rollback=()=>{if(had)S.days.set(iso,had);else S.days.delete(iso)};
+    setEditorSaving(true);
+    try{
+      await optimisticCommit(apply,rollback,()=>persist(iso,next,delta));
+      closeEditor();toast(change.valor?"Registro salvo":"Registro apagado");return true;
+    }
     catch(e){
-      if(had)S.days.set(iso,had);else S.days.delete(iso);
-      if(e&&e.code==="invalid_argument"){S.readOnly=true;toast("Sem permissão para salvar")}
+      setEditorSaving(false);
+      if(e&&e.code==="invalid_argument"){
+        S.readOnly=true;
+        const form=$("form")||$("hform")||$("xform"),submitButton=form&&form.querySelector('button[type="submit"]');
+        if(submitButton)submitButton.disabled=true;
+        toast("Sem permissão para salvar");
+      }
       else if(e&&e.code==="quota_exceeded")toast("Armazenamento cheio. Baixe a planilha e peça para arquivar dias antigos.");
       else toast("Não foi possível salvar. Tente de novo.");
-      render();
       return false;
     }
   }
@@ -1703,11 +1721,9 @@ input.in{height:48px}
     if(has(m.antes))m.antesEm=antesHora?isoTime(iso,antesHora):(has(prev.antes)&&prev.antesEm?prev.antesEm:(iso===todayIso()?Date.now():null));
     const clean={};Object.entries(m).forEach(([a,b])=>{if(has(b)&&!(Array.isArray(b)&&!b.length))clean[a]=b});
     const valor=mealFilled(clean)?Object.assign(clean,{criadoEm:prev.criadoEm||Date.now(),atualizadoEm:Date.now()},autoria(prev)):null;
-    S.fotoDraft=null;
     const ok=await writeDay(iso,{tipo:"refeicao",chave:k,valor});
     if(d){const kept=valor&&valor.fotos||[];
-      if(ok)deleteAssets(d.orig.filter(id=>!kept.includes(id)));
-      else deleteAssets(d.novos);}
+      if(ok){S.fotoDraft=null;deleteAssets(d.orig.filter(id=>!kept.includes(id)))}}
   }
 
   const DL_MSG="Este navegador não permitiu baixar o arquivo. Abra o diário no Chrome ou Safari e tente novamente.";
@@ -1844,7 +1860,7 @@ input.in{height:48px}
     if(id==="rep-nome"){const nome=e.target.value.trim();if(nome===S.nome)return;const antes=S.nome;S.nome=nome;renderTop();
       try{await saveNome(nome);toast(nome?"Nome salvo":"Nome removido")}catch(err){S.nome=antes;renderTop();toast("Não foi possível salvar o nome")}return}
     if(e.target.id==="h-lo"){const v=$("h-valor");v.disabled=e.target.checked;if(e.target.checked)v.value="";checkHipo(false)}});
-  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("lightbox")){closeLightbox();return}if(S.editing){discardDraft();closeEditor()}});
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if($("lightbox")){closeLightbox();return}if(S.editing){if(S.editing.saving){toast("Aguarde o salvamento terminar");return}discardDraft();closeEditor()}});
   document.addEventListener("error",e=>{const t=e.target;if(t&&t.tagName==="IMG"&&t.dataset.foto&&!t.classList.contains("broken")){t.classList.add("broken");t.alt="Foto indisponível"}},true);
   $("datepick").addEventListener("change",e=>{const v=e.target.value;if(v&&v<=todayIso()){S.date=v;render()}});
 
