@@ -310,7 +310,7 @@ input.in{height:48px}
   function distrib(v){return v.length?{n:v.length,min:Math.min(...v),p25:percentil(v,.25),med:percentil(v,.5),p75:percentil(v,.75),max:Math.max(...v)}:null}
   function has(v){return v!==null&&v!==undefined&&v!==""}
   function mealOf(iso,k){const d=S.days.get(iso);return d&&d.refeicoes&&d.refeicoes[k]||null}
-  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
+  function mealFilled(m){return !!m&&(has(m.antes)||has(m.insulina)||has(m.carbo)||has(m.depois)||has(m.comeu)||has(m.obs)||(m.tags||[]).length>0||(m.fotos||[]).length>0)}
   const MAX_FOTOS=3;
   function fotoUrl(id){return S.fotoUrls[id]||("/_blob/"+id)}
   function thumbs(ids){return ids&&ids.length?`<span class="thumbs">${ids.map(id=>`<button type="button" data-foto="${esc(id)}" aria-label="Ver foto do prato"><img data-foto="${esc(id)}" src="${esc(fotoUrl(id))}" alt="Foto do prato" loading="lazy"></button>`).join("")}</span>`:""}
@@ -365,10 +365,11 @@ input.in{height:48px}
     box.innerHTML=`<span style="font-weight:700">Das outras vezes</span> <span class="hint">(${lista.length===1?"1 refeição parecida":lista.length+" refeições parecidas"})</span>
       <ul class="outras">${lista.slice(0,MAX).map(({iso,x,m})=>`<li class="outra">
         <span class="top-line"><strong>${esc(shortDate(iso))} · ${x.n}</strong><span class="vals"><span class="va">${has(m.antes)?fmt(+m.antes):"–"}</span> → <span class="vd">${has(m.depois)?fmt(+m.depois):"–"}</span>${has(m.antes)&&has(m.depois)?` <small>(${m.depois-m.antes>0?"+":""}${fmt(m.depois-m.antes)})</small>`:""}</span></span>
-        <small>${esc(m.comeu)}${has(m.insulina)?` · ${esc(fmt(+m.insulina,1))} un`:""}${(m.tags||[]).length?` · ${esc(m.tags.join(", "))}`:""}</small>${thumbs(m.fotos)}</li>`).join("")}</ul>
+        <small>${esc(m.comeu)}${has(m.carbo)?` · ${esc(carboTxt(m))}`:""}${has(m.insulina)?` · ${esc(fmt(+m.insulina,1))} un`:""}${(m.tags||[]).length?` · ${esc(m.tags.join(", "))}`:""}</small>${thumbs(m.fotos)}</li>`).join("")}</ul>
       <div class="hint">Glicemia antes → 2 h depois, em mg/dL.${lista.length>MAX?` Mostrando as ${MAX} mais parecidas.`:""}</div>`;
   }
   let outrasTimer;
+  function carboTxt(m){return has(m&&m.carbo)?fmt(+m.carbo,1)+" g de carboidrato":""}
   function hipoValor(h){return h.lo?"LO":has(h.valor)?fmt(+h.valor):"não medida"}
 
   const $ = id=>document.getElementById(id);
@@ -519,7 +520,7 @@ input.in{height:48px}
       h+=`<li><button class="meal${isNow?" now":""}" data-meal="${x.k}">
         <span class="meal-name">${x.n}</span>
         <span class="meal-hint">${hint}${food}</span>
-        ${filled?(()=>{const it=[...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
+        ${filled?(()=>{const it=[...(has(m.carbo)?[carboTxt(m)]:[]),...(m.tags||[]),...((m.fotos||[]).length?[(m.fotos.length===1?"1 foto":m.fotos.length+" fotos")]:[])];
           return it.length||m.criadoPor?`<span class="meal-tags">${esc(it.join(" · "))}${nomeSpan(m.criadoPor,it.length?" · por ":"por ")}</span>`:""})():""}
         ${filled?`<span class="readings">${rd("a",m.antes,"antes")}${rd("i",m.insulina,"un",1)}${rd("d",m.depois,"2h")}</span>`:`<span class="addlabel">+ Registrar</span>`}
       </button></li>`;
@@ -539,7 +540,7 @@ input.in{height:48px}
     let rows="";
     MEALS.forEach(x=>{
       const m=mealOf(iso,x.k);if(!mealFilled(m))return;
-      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
+      rows+=`<tr><td>${x.n}</td><td class="num">${has(m.antes)?fmt(+m.antes):"–"}</td><td class="num">${has(m.insulina)?fmt(+m.insulina,1):"–"}</td><td class="num">${has(m.depois)?fmt(+m.depois):"–"}</td><td class="food">${esc(m.comeu||"")}${has(m.carbo)?`<span class="tagline">${esc(carboTxt(m))}</span>`:""}${(m.tags||[]).length?`<span class="tagline">${esc(m.tags.join(" · "))}</span>`:""}${has(m.obs)?`<em>Obs.: ${esc(m.obs)}</em>`:""}${m.criadoPor?`<span class="tagline">${nomeSpan(m.criadoPor,"por ")}</span>`:""}${thumbs(m.fotos)}</td></tr>`;
     });
     let out=rows?`<div class="tablewrap"><table><thead><tr><th>Refeição</th><th class="num">Antes</th><th class="num">Insul.</th><th class="num">2h</th><th>O que comeu e bebeu</th></tr></thead><tbody>${rows}</tbody></table></div>`:"";
     const xs=extrasOf(iso);
@@ -1030,6 +1031,7 @@ input.in{height:48px}
         <div class="field"><label for="f-ins">Insulina</label><div class="suffix"><input id="f-ins" inputmode="decimal" autocomplete="off" value="${has(m.insulina)?esc(String(m.insulina).replace(".",",")):""}" placeholder="—"><span>unid.</span></div><div id="w-ins"></div></div>
       </div>
       <div class="field"><label for="f-comeu">O que comeu e bebeu</label><textarea class="in" id="f-comeu" rows="2" placeholder="Ex.: pão com queijo e um copo de leite">${esc(m.comeu||"")}</textarea><div id="outras"></div></div>
+      <div class="field"><label for="f-carbo">Carboidratos <span class="hint">(opcional, se vocês contam)</span></label><div class="suffix" style="max-width:50%"><input id="f-carbo" inputmode="decimal" autocomplete="off" value="${has(m.carbo)?esc(String(m.carbo).replace(".",",")):""}" placeholder="—"><span>g</span></div><div id="w-carbo"></div></div>
       <div class="field"><span style="font-weight:700">Foto do prato <span class="hint">(opcional, até ${MAX_FOTOS})</span></span>
         <div class="fotos" id="fotos"></div>
         <div class="hint" id="fotos-hint">Fotografe só o prato, evite o rosto ${S.nome?"de "+esc(S.nome):"da criança"}. A localização da foto é removida antes de salvar.</div></div>
@@ -1041,7 +1043,7 @@ input.in{height:48px}
       <div class="actions"><button type="button" class="btn" id="cancel">Cancelar</button><button type="submit" class="btn primary" ${ro?"disabled":""}>Salvar</button></div>
       ${mealFilled(m)&&!ro?delBlock(`Apagar o registro de ${x.n.toLowerCase()} deste dia?`):""}
     </form></div>`;
-    ["antes","depois"].forEach(f=>checkGlu(f));checkIns();
+    ["antes","depois"].forEach(f=>checkGlu(f));checkIns();checkCarbo();
     renderFotos();renderOutras();fillNames();
   }
   function checkGlu(f){
@@ -1049,6 +1051,13 @@ input.in{height:48px}
     const v=parseNum(el.value);
     if(Number.isNaN(v)){w.className="err";w.textContent="Use só números (ex.: 132).";return false}
     if(v!=null&&(v<20||v>600)){w.className="warn";w.textContent="Valor fora do comum (20–600). Confira antes de salvar.";return true}
+    w.textContent="";return true;
+  }
+  function checkCarbo(){
+    const el=$("f-carbo"),w=$("w-carbo");if(!el||!w)return true;
+    const v=parseNum(el.value);
+    if(Number.isNaN(v)||(v!=null&&v<0)){w.className="err";w.textContent="Use só números, em gramas (ex.: 45).";return false}
+    if(v!=null&&v>250){w.className="warn";w.textContent="Valor alto para uma refeição. Confira se está em gramas.";return true}
     w.textContent="";return true;
   }
   function checkIns(){
@@ -1274,10 +1283,10 @@ input.in{height:48px}
   async function submit(){
     const d=S.fotoDraft;
     if(d&&d.busy){toast("Aguarde a foto terminar de enviar");return}
-    const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns();
-    if(!okA||!okD||!okI){toast("Corrija os campos marcados");return}
+    const okA=checkGlu("antes"),okD=checkGlu("depois"),okI=checkIns(),okC=checkCarbo();
+    if(!okA||!okD||!okI||!okC){toast("Corrija os campos marcados");return}
     const {iso,k}=S.editing, prev=mealOf(iso,k)||{};
-    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),depois:parseNum($("f-depois").value),
+    const m={antes:parseNum($("f-antes").value),insulina:parseNum($("f-ins").value),carbo:parseNum($("f-carbo").value),depois:parseNum($("f-depois").value),
              comeu:$("f-comeu").value.trim(),obs:$("f-obs").value.trim(),
              tags:[...document.querySelectorAll('input[name="f-tag"]:checked')].map(i=>i.value),
              fotos:d?d.cur.slice():(prev.fotos||[])};
@@ -1382,7 +1391,7 @@ input.in{height:48px}
     if(id==="x-valor"||id==="x-hora"){checkExtra(false);return}
     if(id==="h-valor"||id==="h-nova"||id==="h-hora"){checkHipo(false);return}
     if(id==="f-comeu"){clearTimeout(outrasTimer);outrasTimer=setTimeout(renderOutras,250);return}
-    if(id==="f-antes")checkGlu("antes");else if(id==="f-depois")checkGlu("depois");else if(id==="f-ins")checkIns();
+    if(id==="f-antes")checkGlu("antes");else if(id==="f-depois")checkGlu("depois");else if(id==="f-ins")checkIns();else if(id==="f-carbo")checkCarbo();
   });
   document.addEventListener("change",async e=>{
     const id=e.target.id;
