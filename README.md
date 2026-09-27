@@ -36,7 +36,6 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - Depois de anotar a glicemia antes, aparece o lembrete "2h às HH:MM".
 - Os horários da medição antes, da refeição/aplicação e da medição 2 h depois podem ser registrados separadamente.
 - Há **etiquetas** de um toque: atividade física, festa/doce, comeu fora, na escola, doente, não comeu tudo, comeu mais que o normal, dormiu mal, nervoso.
-- Cada refeição aceita até 3 **fotos do prato**.
 - O **registro de hipoglicemia** guarda horário, valor (ou "LO"), situação, sintomas, o que foi feito e a nova medição. Ele mostra o plano que a família anotou da equipe médica.
 - As **medições extras** (ao acordar, ao deitar, de madrugada…) não entram nas médias das refeições.
 
@@ -46,7 +45,7 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - Quem não tem permissão para editar vê um aviso logo ao abrir, e o botão Salvar fica desabilitado.
 - O topo mostra quando uma alteração está sendo salva e quando foi concluída. Se duas pessoas alterarem o mesmo registro ao mesmo tempo, o site pede que o cuidador escolha entre carregar a versão mais recente ou substituir conscientemente.
 
-**Das outras vezes:** enquanto você escreve o que a criança comeu, aparecem as refeições anteriores com os mesmos alimentos, com a glicemia antes → 2 h, a variação, a insulina e as fotos.
+**Das outras vezes:** enquanto você escreve o que a criança comeu, aparecem as refeições anteriores com os mesmos alimentos, com a glicemia antes → 2 h, a variação e a insulina.
 
 **Histórico:** um cartão por dia, com filtro por etiqueta.
 
@@ -65,13 +64,13 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 - Exporta o **relatório em PDF** (jsPDF, com os perfis e o AGP), a **planilha em CSV** e um resumo em texto para copiar. O PDF também pode ser gerado só com as leituras do sensor.
 
 **Cópia de segurança**
-- Baixa um arquivo `.json` com todos os registros, as leituras do sensor, o nome, o plano da equipe médica e, se quiser, as fotos.
+- Baixa um arquivo `.json` com todos os registros, as leituras do sensor, o nome e o plano da equipe médica. Cópias feitas quando o site ainda guardava fotos continuam aceitas; as fotos delas são ignoradas.
 - Restaura a partir desse arquivo sem apagar nada mais novo:
   - dias que faltam são adicionados;
   - num dia que existe nos dois lados, fica a versão alterada por último;
   - as leituras do sensor são juntadas, como na importação;
   - antes de gravar, o site mostra o que vai acontecer.
-- Nas opções de privacidade é possível apagar todos os registros, leituras, fotos e configurações, com confirmação digitada.
+- Nas opções de privacidade é possível apagar todos os registros, leituras e configurações, com confirmação digitada.
 
 **Instalação no celular:** quando servido por HTTPS ou em `localhost`, o diário pode ser instalado como aplicativo. O aplicativo guarda somente os arquivos necessários para abrir a interface; os registros continuam no armazenamento configurado ou no navegador.
 
@@ -82,16 +81,15 @@ O site foi feito para rodar como **Artifact do Claude** (claude.ai). Ele usa as 
 | Capacidade | Uso |
 |---|---|
 | `db` | Um registro por dia (`dias/AAAA-MM-DD`), o nome da criança (`config/crianca`) e o plano da equipe médica (`config/plano`) |
-| `assets` | Fotos dos pratos |
 | `downloads` | Baixar o PDF, o CSV e a cópia de segurança |
 | `user` (escopo `profile`) | Saber quem está registrando, mostrar o nome de quem anotou e saber se a pessoa pode editar |
 
-Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. Não dá para enviar fotos, mas PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
+Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
 
 ### Como usar
 
 - **Testar no computador:** abra `site/index.html` no navegador. Ele roda em modo local.
-- **Usar de verdade:** publique como Artifact no claude.ai com as capacidades `db`, `assets`, `downloads` e `user`, e **publique o `logic.js` junto**, como arquivo de apoio no mesmo caminho relativo (`logic.js`, ao lado da página). Se só o `index.html` for publicado, o site mostra um aviso de que falta o `logic.js` e não carrega. Mantenha a regra de acesso do banco já publicada (`read`/`write` em `interact`). O `sw.js`, o manifesto e o ícone não precisam ir: dentro do Claude, o site não registra o service worker. Depois é só abrir o link no celular.
+- **Usar de verdade:** publique como Artifact no claude.ai com as capacidades `db`, `downloads` e `user`, e **publique o `logic.js` junto**, como arquivo de apoio no mesmo caminho relativo (`logic.js`, ao lado da página). Se só o `index.html` for publicado, o site mostra um aviso de que falta o `logic.js` e não carrega. Mantenha a regra de acesso do banco já publicada (`read`/`write` em `interact`). O `sw.js`, o manifesto e o ícone não precisam ir: dentro do Claude, o site não registra o service worker. Depois é só abrir o link no celular.
 - **Compartilhar com a família:** compartilhe o Artifact pelo claude.ai.
   - Quem vai registrar precisa de permissão para **editar**.
   - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
@@ -102,7 +100,7 @@ Se essas capacidades não estiverem disponíveis, o site entra em **modo local**
 
 ```
 dias/2026-09-27
-  refeicoes: { cafe: {antes, insulina, local, carbo, depois, comeu, obs, tags, fotos, criadoPor, atualizadoPor, criadoEm, atualizadoEm}, lanche: null, ... }
+  refeicoes: { cafe: {antes, insulina, local, carbo, depois, comeu, obs, tags, criadoPor, atualizadoPor, criadoEm, atualizadoEm}, lanche: null, ... }
   hipos:     { <id>: {hora, valor | lo, situacao, sintomas, tratamento, nova, novaHora, obs, criadoPor, ...} }
   extras:    { <id>: {hora, valor | lo | hi, momento, obs, criadoPor, ...} }
   data, atualizadoEm
@@ -162,7 +160,7 @@ O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 ## Decisões de projeto
 
 - **Não sugere nada de tratamento.** O site registra e resume, mas não calcula dose, não define meta e não classifica um valor como "bom" ou "ruim". O plano para hipoglicemia é texto livre, escrito pela família conforme a orientação da equipe médica.
-- **Fotos sem localização.** A foto é recomprimida no próprio aparelho antes de ser salva. Isso diminui o arquivo e remove os metadados, inclusive a localização GPS.
+- **Sem fotos dos pratos.** Houve uma versão com até 3 fotos por refeição, mas ela foi retirada: exigia compressão, envio, limpeza das imagens órfãs e cópia em base64, e seria a parte mais trabalhosa de levar o diário para outro banco (um armazenamento de arquivos com regras próprias). O texto de "O que comeu" e as etiquetas já cumprem o papel. Refeições e cópias antigas com o campo `fotos` continuam válidas e o campo é ignorado.
 - **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
 - **O CSV segue as colunas da planilha Excel.** As 7 primeiras colunas preservam o formato antigo; depois vêm os três horários, carboidratos, local da aplicação e etiquetas, na mesma ordem da planilha.
 - **Cada gravação envia só o que mudou.** O site usa `update`, que mescla, em vez de regravar o dia inteiro. Assim, duas pessoas registrando refeições diferentes no mesmo dia não apagam o registro uma da outra. O banco não tem transações, então duas pessoas editando *a mesma* refeição ao mesmo tempo continuam no "último a salvar vence".

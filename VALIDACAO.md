@@ -35,15 +35,14 @@ O resultado esperado é nenhum teste com falha. A suíte verifica:
 - [ ] Baixar a cópia de segurança e guardá-la fora do aparelho.
 - [ ] Adicionar uma terceira refeição depois do backup.
 - [ ] Restaurar a cópia e confirmar que as três refeições continuam presentes.
-- [ ] Conferir nome, plano, fotos, medições extras, hipoglicemias e sensor.
+- [ ] Conferir nome, plano, medições extras, hipoglicemias e sensor.
 - [ ] Tentar importar um arquivo JSON que não seja do diário e confirmar que ele é recusado.
 
 ## 4. Instalação e privacidade
 
 - [ ] Instalar o site na tela inicial de um Android e de um iPhone, se ambos forem usados.
 - [ ] Abrir uma vez com internet, ativar o modo avião e confirmar que a estrutura do site abre.
-- [ ] Confirmar que fotos não aparecem offline depois de limpar os dados do site.
-- [ ] Usar **Apagar todos os dados**, recarregar e confirmar que registros, nome, plano e fotos não voltam.
+- [ ] Usar **Apagar todos os dados**, recarregar e confirmar que registros, nome e plano não voltam.
 - [ ] Em aparelho compartilhado, confirmar que a família entende que o modo local não possui senha própria.
 
 ## 5. Conferência do material para consulta
