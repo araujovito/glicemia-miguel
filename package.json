@@ -6,7 +6,9 @@
     "test:unit": "node --test tests/site-logic.test.js",
     "test:browser": "node --test tests/site-browser.test.js",
     "check": "node --check site/logic.js && node --test tests/*.test.js",
-    "test:compartilhado": "node --test tests/site-shared-db.test.js"
+    "test:compartilhado": "node --test tests/site-shared-db.test.js",
+    "test:supabase": "node --test tests/site-supabase.test.js",
+    "test:banco": "npx supabase test db"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

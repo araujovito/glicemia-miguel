@@ -17,7 +17,10 @@ O projeto tem duas partes, que funcionam de forma independente:
 site/index.html                                 Site (HTML, CSS e a interface, sem build)
 site/logic.js                                   Funções puras (cálculos, junções, validação), testáveis sem navegador
 site/sw.js, manifest.webmanifest, icon.svg      Instalação como aplicativo, só fora do Claude
-tests/                                          Testes: lógica, navegador (modo local) e modo compartilhado
+site/supabase.js, config.js, vendor/            Banco fora do Claude (Supabase), login Google e convites
+supabase/migrations/                            Tabelas, regras de acesso (RLS) e funções do banco Postgres
+supabase/tests/                                 Testes das regras de acesso (pgTAP)
+tests/                                          Testes: lógica, navegador (modo local), modo compartilhado e Supabase
 VALIDACAO.md                                    Roteiro manual antes de liberar para a família
 planilha/gerar_planilha.py                      Script que monta a planilha a partir da folha A4
 planilha/modelo_folha_A4.xlsx                   Folha diária original, para imprimir e preencher à mão
@@ -76,7 +79,13 @@ planilha/Controle de Glicemia - Registros.xlsx  Planilha gerada pelo script (vaz
 
 ### Onde os dados ficam
 
-O site foi feito para rodar como **Artifact do Claude** (claude.ai). Ele usa as capacidades da plataforma por meio de `window.claude.use(...)`:
+O site roda de três jeitos, escolhidos sozinhos ao abrir:
+
+1. **No Claude**, como Artifact: usa o banco da plataforma (abaixo).
+2. **Fora do Claude, com Supabase**: quando `site/config.js` aponta para um projeto, os dados ficam num banco Postgres, com login Google e convites por e-mail. Veja [Usar fora do Claude](#usar-fora-do-claude-supabase).
+3. **Modo local**: sem nenhum dos dois, os dados ficam só naquele navegador.
+
+No Claude, o site usa as capacidades da plataforma por meio de `window.claude.use(...)`:
 
 | Capacidade | Uso |
 |---|---|
@@ -84,7 +93,7 @@ O site foi feito para rodar como **Artifact do Claude** (claude.ai). Ele usa as 
 | `downloads` | Baixar o PDF, o CSV e a cópia de segurança |
 | `user` (escopo `profile`) | Saber quem está registrando, mostrar o nome de quem anotou e saber se a pessoa pode editar |
 
-Se essas capacidades não estiverem disponíveis, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
+Se essas capacidades não estiverem disponíveis e não houver Supabase configurado, o site entra em **modo local** e mostra um aviso no topo. Isso acontece, por exemplo, ao abrir o `index.html` direto no navegador. No modo local os dados ficam só naquele navegador (`localStorage`), sem uma senha própria. PDF, CSV e cópia de segurança podem ser baixados pelo próprio navegador.
 
 ### Como usar
 
@@ -95,6 +104,37 @@ Se essas capacidades não estiverem disponíveis, o site entra em **modo local**
   - Cada pessoa entra com a própria conta. É assim que o site sabe quem anotou cada coisa.
   - O banco é publicado com a regra `read: "interact", write: "interact"`. Por ela, só quem pode participar (Contributor ou acima) lê os registros. Quem recebe o link só para ver abre um diário vazio. Isso é proposital, porque são dados de saúde de uma criança.
   - Para a equipe médica, mande o **relatório em PDF** em vez do link.
+
+### Usar fora do Claude (Supabase)
+
+O site conversa direto com o banco, sem um servidor próprio. Quem protege os dados são as regras de Row Level Security em `supabase/migrations/`. A chave pública do site só consegue fazer o que essas regras permitem:
+
+- **Sem login, nada abre.** Cada pessoa entra com a conta Google.
+- **Só entra quem foi convidado.** O dono convida pelo e-mail da conta Google, em Resumo → Pessoas com acesso. O convite só vale para e-mail confirmado.
+- **Três papéis por diário:** dono (convida, remove, apaga tudo), cuidador (registra) e leitor (só vê, por exemplo a equipe médica).
+- **A autoria é carimbada pelo banco** com a conta logada. Ninguém consegue registrar em nome de outra pessoa.
+
+Passo a passo, uma vez só:
+
+1. **Crie o projeto** em [supabase.com](https://supabase.com), na região **South America (São Paulo)**, porque são dados de saúde de uma criança. O plano gratuito basta. Anote a senha do banco num gerenciador de senhas.
+2. **Crie o banco:** instale a CLI (`npx supabase`), rode `npx supabase login`, depois `npx supabase link --project-ref <id-do-projeto>` e `npx supabase db push`. Isso aplica `supabase/migrations/`.
+3. **Login Google:**
+   - No [Google Cloud Console](https://console.cloud.google.com/apis/credentials), crie um "ID do cliente OAuth" do tipo *Aplicativo da Web*. Em "URIs de redirecionamento autorizados", coloque `https://<id-do-projeto>.supabase.co/auth/v1/callback`.
+   - No Supabase, em Authentication → Sign In / Providers → Google, ative e cole o Client ID e o Client Secret.
+   - Em Authentication → URL Configuration, coloque o endereço do site em *Site URL* e em *Redirect URLs*.
+4. **Aponte o site para o projeto:** em `site/config.js`, preencha `supabaseUrl` e `supabaseAnonKey` com a URL e a chave pública do projeto (Project Settings → API; a "anon" ou a "publishable"). **Nunca** use a chave `service_role` ou `secret`.
+5. **Publique a pasta `site/`** num serviço de site estático com HTTPS, por exemplo Cloudflare Pages ou Netlify. Os dois publicam a partir de repositório privado. O GitHub Pages só faz isso no plano pago.
+6. **Primeiro acesso:** entre com a sua conta, toque em "Criar um diário" e convide os outros cuidadores. Para trazer o que já está no Claude, baixe a cópia de segurança lá e use "Restaurar de uma cópia" no site novo. A autoria dos registros restaurados fica com quem restaurou, porque as contas do Claude não existem no Supabase.
+
+O Claude continua funcionando como antes. `config.js` não é publicado no Artifact, então lá o site nem tenta o Supabase.
+
+Para desenvolver com um Supabase local (precisa de Docker):
+
+```bash
+npx supabase start          # sobe Postgres, autenticação, API e tempo real e aplica as migrações
+npx supabase test db        # regras de acesso (supabase/tests, pgTAP)
+npm run test:supabase       # o site contra o banco local, com várias pessoas ao mesmo tempo
+```
 
 ### Formato de um dia
 
@@ -151,15 +191,21 @@ npm test                    # tudo
 npm run test:unit           # só a lógica (logic.js), sem navegador
 npm run test:browser        # navegador no modo local e na demonstração
 npm run test:compartilhado  # navegador no modo compartilhado, com banco simulado e duas pessoas
+npm run test:supabase       # site contra um Supabase local (pulado se ele não estiver rodando)
+npm run test:banco          # regras de acesso do banco, pgTAP (precisa do Supabase local)
 ```
 
 Os testes do modo compartilhado simulam o banco do Claude com as mesmas regras do real (update mescla e exige que o documento exista) e seguram a entrega das gravações, para reproduzir dois aparelhos salvando ao mesmo tempo.
+
+Os testes do Supabase usam um banco de verdade: cada pessoa (dona, cuidadora, leitor, alguém sem convite) abre o site num navegador separado. Como o Google não existe no ambiente local, as contas de teste entram com senha, e a sessão é colocada no navegador antes de o site abrir.
 
 O script lê `planilha/modelo_folha_A4.xlsx` e grava o resultado na mesma pasta.
 
 ## Decisões de projeto
 
 - **Não sugere nada de tratamento.** O site registra e resume, mas não calcula dose, não define meta e não classifica um valor como "bom" ou "ruim". O plano para hipoglicemia é texto livre, escrito pela família conforme a orientação da equipe médica.
+- **O site fala direto com o banco, e a segurança está no Postgres.** Um servidor próprio seria mais uma coisa para manter e atualizar. Com Row Level Security, cada regra (quem lê, quem grava, quem apaga tudo) fica no banco e é testada em `supabase/tests`. MongoDB e SQLite foram descartados por isso: nenhum dos dois oferece acesso seguro direto do navegador sem uma API no meio.
+- **Tabelas separadas, mas o site continua vendo "um dia".** Refeições, hipoglicemias, medições extras e leituras do sensor têm tabelas próprias, com limites de valor. As funções `gravar_dia` e `ler_dias` traduzem para o mesmo objeto do banco do Claude. Por isso `site/supabase.js` imita a interface do Claude e o resto do site é igual nos dois modos.
 - **Sem fotos dos pratos.** Houve uma versão com até 3 fotos por refeição, mas ela foi retirada: exigia compressão, envio, limpeza das imagens órfãs e cópia em base64, e seria a parte mais trabalhosa de levar o diário para outro banco (um armazenamento de arquivos com regras próprias). O texto de "O que comeu" e as etiquetas já cumprem o papel. Refeições e cópias antigas com o campo `fotos` continuam válidas e o campo é ignorado.
 - **Um arquivo só, sem build.** O site é um único HTML que funciona aberto direto ou publicado como Artifact. A única biblioteca externa é o jsPDF, que só é carregado do cdnjs na hora de gerar o PDF.
 - **O CSV segue as colunas da planilha Excel.** As 7 primeiras colunas preservam o formato antigo; depois vêm os três horários, carboidratos, local da aplicação e etiquetas, na mesma ordem da planilha.
