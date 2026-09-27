@@ -297,7 +297,7 @@ input.in{height:48px}
   ];
   const LOCAL_KEY = "diario-glicemia-v1";
   const S = { tab:"dia", date:todayIso(), days:new Map(), mode:"loading", db:null, readOnly:false,
-              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null,
+              period:14, histLimit:20, nome:"", busy:false, dlMsg:null, plano:"", tagFilter:null, assets:null, user:null, uid:null, fotoDraft:null, fotoUrls:{}, editing:null, copyText:null, downloads:null, sensor:new Map(), imp:{plano:null,busy:false,msg:null},
               backup:{fotos:true,busy:false,msg:null} };
   const queues = {};
 
@@ -425,7 +425,10 @@ input.in{height:48px}
   function toast(msg){const t=$("toast");t.textContent=msg;t.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.hidden=true,2400)}
 
   /* ---------- armazenamento ---------- */
+  function loadSensorLocal(){try{const raw=localStorage.getItem(LOCAL_KEY+"-sensor");if(raw)S.sensor=new Map(Object.entries(JSON.parse(raw)))}catch(e){}}
+  function saveSensorLocal(){try{localStorage.setItem(LOCAL_KEY+"-sensor",JSON.stringify(Object.fromEntries(S.sensor)));return true}catch(e){return false}}
   function loadLocal(){
+    loadSensorLocal();
     try{const raw=localStorage.getItem(LOCAL_KEY);if(raw){const o=JSON.parse(raw);S.days=new Map(Object.entries(o))}}catch(e){}
     try{S.plano=localStorage.getItem(LOCAL_KEY+"-plano")||""}catch(e){}
   }
@@ -476,6 +479,7 @@ input.in{height:48px}
       });
       db.doc("config/crianca").onSnapshot(d=>{if(d.exists){S.nome=d.data().nome||"";renderTop();if(!S.editing)renderView()}},()=>{});
       db.doc("config/plano").onSnapshot(d=>{S.plano=d.exists&&d.data().texto||"";if(!S.editing)renderView()},()=>{});
+      db.collection("sensor").onSnapshot(snap=>{const m=new Map();snap.docs.forEach(d=>{if(d.exists)m.set(d.id,d.data())});S.sensor=m;if(!S.editing)renderView()},()=>{});
     }).catch(fallback);
     window.claude.use("assets").then(a=>{S.assets=a;if(S.fotoDraft)renderFotos()}).catch(()=>{});
     window.claude.use("downloads").then(d=>{S.downloads=d;if(S.tab==="resumo")renderView()}).catch(()=>{});
@@ -718,7 +722,7 @@ input.in{height:48px}
       <div class="stat"><b>${fmt(avg(R.allA))}</b><small>média antes</small></div>
       <div class="stat"><b>${fmt(avg(R.allD))}</b><small>média 2h depois</small></div>
       <div class="stat hypo"><b>${R.hipos.length}</b><small>${R.hipos.length===1?"hipoglicemia registrada":"hipoglicemias registradas"}</small></div></div>`;
-    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+backupCard();
+    if(!R.isos.length)return h+`<div class="empty-state">Quando houver registros neste período, as médias por refeição aparecem aqui.</div>`+sensorCard()+backupCard();
     h+=`<section class="card" style="margin-bottom:12px"><strong>Levar para a consulta</strong>
       <div class="field" style="margin-top:8px"><label for="rep-nome">Nome da criança</label>
       <input class="in" id="rep-nome" autocomplete="off" value="${esc(S.nome)}" placeholder="Nome da criança"></div>
@@ -760,6 +764,7 @@ input.in{height:48px}
         R.hipos.map(x=>`<tr><td>${esc(shortDate(x.iso))}</td><td class="num">${esc(x.hora||"")}</td><td class="num">${esc(hipoValor(x))}</td><td class="food">${esc(x.situacao||"")}</td><td class="food">${esc(x.tratamento||"")}</td><td class="num">${has(x.nova)?esc(fmt(+x.nova))+(x.novaHora?" ("+esc(x.novaHora)+")":""):"–"}</td></tr>`).join("")+
         `</tbody></table></div></section>`;
     }
+    h+=sensorCard();
     h+=backupCard();
     h+=`<p class="note">Este controle é para registro e acompanhamento. Metas, doses e decisões de tratamento seguem a equipe médica responsável.</p>`;
     return h;
@@ -801,6 +806,113 @@ input.in{height:48px}
   // Um arquivo .json com tudo o que o site guarda: dias, nome, plano da equipe médica e, se marcado, as fotos (em base64).
   // Serve para não depender de uma única conta: o arquivo fica com a família.
   const BACKUP_FORMATO="diario-glicemia-backup";
+  /* ---------- sensor (FreeStyle Libre, CSV do LibreView) ---------- */
+  // Cada dia do sensor é um documento sensor/AAAA-MM-DD com três listas paralelas (minuto do dia, mg/dL, tipo),
+  // porque o banco não guarda listas dentro de listas. tipo 0 = leitura automática (15 em 15 min), 1 = escaneamento.
+  function lerCsvTexto(t){
+    t=t.replace(/^\uFEFF/,"");
+    const amostra=t.split(/\r?\n/).slice(0,4).join("\n");
+    const sep=[",",";","\t"].map(c=>[c,amostra.split(c).length]).sort((a,b)=>b[1]-a[1])[0][0];
+    const rows=[];let row=[],cell="",q=false;
+    for(let i=0;i<t.length;i++){const c=t[i];
+      if(q){if(c==='"'){if(t[i+1]==='"'){cell+='"';i++}else q=false}else cell+=c}
+      else if(c==='"')q=true;
+      else if(c===sep){row.push(cell);cell=""}
+      else if(c==="\n"||c==="\r"){if(c==="\r"&&t[i+1]==="\n")i++;row.push(cell);rows.push(row);row=[];cell=""}
+      else cell+=c;
+    }
+    if(cell||row.length){row.push(cell);rows.push(row)}
+    return rows;
+  }
+  const NAO_LIBRE="Este arquivo não parece ser a exportação de glicose do LibreView (arquivo .csv).";
+  function lerLibreView(texto){
+    const rows=lerCsvTexto(texto);
+    // A coluna "tipo de registro" é a referência: as outras vêm em posição fixa em relação a ela (padrão do LibreView).
+    let iTipo=-1,cab=null;
+    for(let i=0;i<Math.min(rows.length,6)&&iTipo<0;i++){
+      const j=rows[i].findIndex(c=>/record type|tipo de regist|tipo de reg/i.test(c));
+      if(j>=0){iTipo=j;cab=rows[i]}
+    }
+    if(iTipo<0)iTipo=3;                                  // sem cabeçalho reconhecível: posição padrão
+    const iData=iTipo-1,iHist=iTipo+1,iScan=iTipo+2;
+    const mmol=cab?/mmol/i.test(cab[iHist]||""):false;
+    const RE=/^\s*(\d{1,4})[-\/.](\d{1,2})[-\/.](\d{1,4})[ T]+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AaPp])?\.?\s*[Mm]?\.?\s*$/;
+    const brutos=[];
+    rows.forEach(r=>{
+      const tipo=(r[iTipo]||"").trim();if(tipo!=="0"&&tipo!=="1")return;
+      const m=RE.exec(r[iData]||"");if(!m)return;
+      let v=parseFloat(String(r[tipo==="0"?iHist:iScan]||"").trim().replace(",","."));
+      if(!isFinite(v))return;
+      if(mmol)v=v*18.016;
+      v=Math.round(v);if(v<20||v>600)return;
+      brutos.push({m,tipo:+tipo,v});
+    });
+    if(!brutos.length)throw NAO_LIBRE;
+    // Ordem da data: ano primeiro é inequívoco; senão, um número acima de 12 decide; na dúvida, dia/mês (padrão no Brasil).
+    let ordem="DMY",ambigua=false;
+    if(brutos[0].m[1].length===4)ordem="YMD";
+    else if(brutos.some(b=>+b.m[1]>12))ordem="DMY";
+    else if(brutos.some(b=>+b.m[2]>12))ordem="MDY";
+    else ambigua=true;
+    const dias=new Map();
+    brutos.forEach(({m,tipo,v})=>{
+      const [a,b,c]=[+m[1],+m[2],+m[3]];
+      const [y,mo,d]=ordem==="YMD"?[a,b,c]:ordem==="MDY"?[c,a,b]:[c,b,a];
+      let h=+m[4];const ap=(m[6]||"").toLowerCase();
+      if(ap==="p"&&h<12)h+=12;if(ap==="a"&&h===12)h=0;
+      if(mo<1||mo>12||d<1||d>31||h>23)return;
+      const iso=`${y}-${pad(mo)}-${pad(d)}`, min=h*60+ +m[5];
+      if(!dias.has(iso))dias.set(iso,new Map());
+      dias.get(iso).set(min*10+tipo,{min,mg:v,tipo});   // mesma leitura repetida no arquivo conta uma vez
+    });
+    const isos=[...dias.keys()].sort();
+    return {dias,isos,n:[...dias.values()].reduce((s,x)=>s+x.size,0),ordem,ambigua,mmol};
+  }
+  // Junta leituras novas com as que já existem no dia (a mesma leitura é substituída, nunca duplicada).
+  function juntarSensor(atual,novos){
+    const m=new Map();
+    if(atual)(atual.min||[]).forEach((min,i)=>m.set(min*10+(atual.tipo||[])[i],{min,mg:atual.mg[i],tipo:(atual.tipo||[])[i]||0}));
+    novos.forEach((p,k)=>m.set(k,p));
+    const pts=[...m.values()].sort((a,b)=>a.min-b.min||a.tipo-b.tipo);
+    return {min:pts.map(p=>p.min),mg:pts.map(p=>p.mg),tipo:pts.map(p=>p.tipo)};
+  }
+  function sensorCard(){
+    const I=S.imp, ro=S.readOnly||S.mode==="offline"||S.mode==="loading", dias=[...S.sensor.keys()].filter(k=>(S.sensor.get(k).min||[]).length).sort();
+    const P=I.plano, dm=iso=>fmtDM.format(parseIso(iso));
+    return `<section class="card" style="margin-top:12px"><strong>Sensor de glicose (FreeStyle Libre)</strong>
+      <p class="note" style="margin-top:6px">${dias.length?`${dias.length} ${dias.length===1?"dia":"dias"} com leituras do sensor, de ${dm(dias[0])} a ${dm(dias[dias.length-1])}.`:"Se a criança usa o sensor, importe o arquivo do LibreView: em libreview.com, Histórico de glicose → Baixar dados de glicose."}</p>
+      ${ro||I.busy||P?"":`<div class="actions"><label class="btn filebtn">Importar arquivo do LibreView (.csv)<input type="file" id="lv-file" accept=".csv,text/csv"></label></div>`}
+      ${P?`<div class="confirm"><strong>${P.n} leituras, de ${dm(P.isos[0])} a ${dm(P.isos[P.isos.length-1])}</strong>
+        <ul class="restore-plan">
+          <li>${P.novos} ${P.novos===1?"dia novo":"dias novos"}${P.isos.length-P.novos?`; ${P.isos.length-P.novos} ${P.isos.length-P.novos===1?"dia já tinha":"dias já tinham"} leituras e ${P.isos.length-P.novos===1?"vai ser completado":"vão ser completados"} (nada é apagado)`:""}.</li>
+          <li>Datas lidas como ${P.ordem==="MDY"?"mês/dia/ano":P.ordem==="YMD"?"ano-mês-dia":"dia/mês/ano"}${P.ambigua?" (o arquivo não deixa claro; confira se as datas acima estão certas)":""}.</li>
+          ${P.mmol?"<li>Valores convertidos de mmol/L para mg/dL.</li>":""}</ul>
+        <div><button type="button" class="btn" id="lv-cancel">Cancelar</button><button type="button" class="btn primary" id="lv-import">Importar</button></div></div>`:""}
+      <p class="note" id="lv-msg" role="status"${I.msg?"":" hidden"}>${esc(I.msg||"")}</p></section>`;
+  }
+  function setImpMsg(msg){S.imp.msg=msg;const el=$("lv-msg");if(el){el.textContent=msg||"";el.hidden=!msg}}
+  async function importarSensor(){
+    const I=S.imp,P=I.plano;if(!P||I.busy)return;
+    I.busy=true;I.plano=null;renderView();
+    let feitos=0;
+    try{
+      for(let i=0;i<P.isos.length;i++){
+        const iso=P.isos[i];setImpMsg(`Importando: dia ${i+1} de ${P.isos.length}…`);
+        const doc=Object.assign({data:iso,fonte:"LibreView",atualizadoEm:Date.now()},juntarSensor(S.sensor.get(iso),P.dias.get(iso)));
+        if(S.uid)doc.importadoPor=S.uid;
+        if(S.mode==="db"){
+          const ref=S.db.doc("sensor/"+iso),chave="sensor/"+iso;
+          const job=(queues[chave]||Promise.resolve()).catch(()=>{}).then(()=>ref.set(doc));queues[chave]=job;
+          try{await job}catch(e){if(e&&e.code==="invalid_argument"){S.readOnly=true;throw "Sem permissão para salvar. A importação parou."}throw e}
+        }
+        S.sensor.set(iso,doc);feitos++;
+      }
+      if(S.mode!=="db"&&!saveSensorLocal())throw "Não há espaço neste navegador para guardar as leituras do sensor.";
+      setImpMsg(`Importação concluída: ${feitos} ${feitos===1?"dia":"dias"} do sensor.`);
+    }catch(err){setImpMsg(typeof err==="string"?err:`A importação parou por um erro depois de ${feitos} ${feitos===1?"dia":"dias"}. Tente de novo: o que já entrou não se repete.`)}
+    finally{I.busy=false;render()}
+  }
+
   function backupCard(){
     const B=S.backup, n=daysWithData().length, ro=S.readOnly||S.mode==="offline"||S.mode==="loading";
     return `<section class="card" style="margin-top:12px"><strong>Cópia de segurança</strong>
@@ -1438,6 +1550,8 @@ input.in{height:48px}
         catch(err){const c=err&&err.code;if(c==="declined")return;if(["unavailable","not_granted","capability_disabled","capability_removed","extension_not_enabled"].includes(c)){S.dlMsg=DL_MSG;renderView()}else toast("Não foi possível baixar agora")}
         break}
       case "bk-export":exportBackup();break;
+      case "lv-cancel":S.imp.plano=null;setImpMsg(null);renderView();break;
+      case "lv-import":importarSensor();break;
       case "bk-cancel":S.backup.plano=null;setBackupMsg(null);renderView();break;
       case "bk-restore":restaurar();break;
       case "csv":{
@@ -1461,6 +1575,10 @@ input.in{height:48px}
   document.addEventListener("change",async e=>{
     const id=e.target.id;
     if(id==="bk-fotos"){S.backup.fotos=e.target.checked;return}
+    if(id==="lv-file"){const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
+      try{const r=lerLibreView(await f.text());r.novos=r.isos.filter(iso=>!S.sensor.has(iso)).length;S.imp.plano=r;S.imp.msg=null}
+      catch(err){S.imp.plano=null;S.imp.msg=typeof err==="string"?err:NAO_LIBRE}
+      renderView();return}
     if(id==="bk-file"){const f=e.target.files&&e.target.files[0];e.target.value="";if(!f)return;
       try{S.backup.plano=planejarRestauracao(lerCopia(await f.text()));S.backup.msg=null}
       catch(err){S.backup.plano=null;S.backup.msg=typeof err==="string"?err:COPIA_INVALIDA}
